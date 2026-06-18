@@ -22,7 +22,7 @@ jobs:
         go-version: '1.26.4'
 
     - name: Build
-      run: go build -v ./...
+      run: go build -v ./... -o ./bouncer
 
     - name: Test
       run: go test -v ./...
@@ -31,4 +31,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: GoBNC-{{ github.sha }}
-        path: bouncer
+        path: ./bouncer
