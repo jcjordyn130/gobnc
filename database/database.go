@@ -31,6 +31,11 @@ type ChatMessage struct {
 func NewDB(file string, maxQLen int) (*DB, error) {
 	db := DB{}
 
+	// Check for blank database string, the database itself doesn't check for it.
+	if file == "" {
+		return nil, fmt.Errorf("database file path is empty")
+	}
+
 	log.Printf("[database] Using %d for max queued messages", maxQLen)
 	db.LogQueue = make(chan ircmsg.Message, maxQLen)
 
