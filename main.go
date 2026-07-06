@@ -57,6 +57,7 @@ func main() {
 	b.Register("NICK", handlers.HandleNICK)
 	b.Register("JOIN", handlers.HandleJOIN)
 	b.Register("QUIT", downstreamHandlers.HandleQUIT)
+	b.Register("PART", downstreamHandlers.HandlePART)
 
 	// Connect to upstream server
 	err = b.ConnectToServer(&conn)

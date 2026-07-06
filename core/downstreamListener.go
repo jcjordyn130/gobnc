@@ -3,7 +3,9 @@
 package core
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -12,10 +14,45 @@ import (
 	"github.com/ergochat/irc-go/ircreader"
 )
 
+func (b *Bouncer) ListenDownstream(bindAddress string) {
+	log.Printf("Starting downstream accept loop for bindAddress %s", bindAddress)
+	listener, err := net.Listen("tcp", bindAddress)
+	if err != nil {
+		log.Fatalf("Failed to bind downstream port: %v", err)
+	}
+
+	log.Printf("Downstream listening on %s", bindAddress)
+
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			log.Println("Downstream accept error:", err)
+			continue
+		}
+
+		log.Printf("[downstream %s] Client connected", conn.RemoteAddr())
+		log.Printf("Client attached to bouncer %s", conn.RemoteAddr())
+		// Add context state
+		ctx, cancel := context.WithCancel(context.Background())
+
+		downstreamConn := &DownstreamConnection{
+			Conn:   conn,
+			Ctx:    ctx,
+			Cancel: cancel,
+			Caps:   make(map[string]bool),
+		}
+
+		b.AddDownstreamConnection(downstreamConn)
+
+		// Spawn a dedicated goroutine for each client connection
+		go b.handleClient(downstreamConn)
+	}
+}
+
 func (b *Bouncer) handleClient(ds *DownstreamConnection) {
 	// Close connection at the end of the function
 	defer log.Printf("[downstream %s] Client disconnected", ds.Conn.RemoteAddr())
-	defer ds.Conn.Close()
+	defer b.DisconnectDownstreamConnection(ds, "Graceful")
 
 	// Setup a new reader for the downstream connection
 	clientReader := ircreader.NewIRCReader(ds.Conn)
@@ -28,12 +65,16 @@ func (b *Bouncer) handleClient(ds *DownstreamConnection) {
 	//b.SendHistory(ds)
 
 	// If we aren't connected to the upstream server, let the client know!
-	rawmsg := ircmsg.MakeMessage(nil, "*status@jordynsblog.org", "NOTICE", "Disconnected from IRC!")
-	msg, err := rawmsg.LineBytes()
-	if err != nil {
-		log.Printf("[downstream %s] Error sending disconnected-to-upstream message: %v", ds.Conn.RemoteAddr(), err)
+	if b.GetUpstreamConn() == nil {
+		fakeHostName := fmt.Sprintf("*status@%s", b.ServerName)
+
+		rawmsg := ircmsg.MakeMessage(nil, fakeHostName, "NOTICE", "Disconnected from IRC!")
+		msg, err := rawmsg.LineBytes()
+		if err != nil {
+			log.Printf("[downstream %s] Error sending disconnected-to-upstream message: %v", ds.Conn.RemoteAddr(), err)
+		}
+		ds.Conn.Write(msg)
 	}
-	ds.Conn.Write(msg)
 
 	// Main downstream connection loop
 	for {
@@ -47,9 +88,9 @@ func (b *Bouncer) handleClient(ds *DownstreamConnection) {
 			}
 
 			// Handle buffer overflow without a line terminator
-			// TODO: maybe send an actual QUIT instead of a connection close?
 			if err == ircreader.ErrReadQ {
 				log.Printf("[downstream %s] Forcing client to quit due to exceeding ReadQ", ds.Conn.RemoteAddr())
+				b.DisconnectDownstreamConnection(ds, "Max ReadQ Exceeded")
 				return
 			}
 

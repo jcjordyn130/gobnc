@@ -5,70 +5,14 @@ package core
 
 import (
 	"bouncer/database"
-	"context"
 	"fmt"
 	"log"
-	"net"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/ergochat/irc-go/ircevent"
 	"github.com/ergochat/irc-go/ircmsg"
 )
-
-// Signature for downstream command handlers
-type DownstreamCommandHandler func(b *Bouncer, ds *DownstreamConnection, msg ircmsg.Message) error
-
-// Core bouncer struct
-// This holds the command handler mapping and the connection to the upstream server
-type Bouncer struct {
-	upstreamConn          *ircevent.Connection
-	DownstreamConnections []*DownstreamConnection
-	DB                    database.DB
-	routes                map[string]DownstreamCommandHandler
-
-	// Holds a mapping of channel names to state structures
-	Channels map[string]*ChannelState
-
-	// Protects critical data structures
-	mu      sync.RWMutex // Protects the Channels map
-	ds_mu   sync.RWMutex // Protects the DownstreamConnections
-	motd_mu sync.RWMutex // Protects the motdCache
-
-	// Fake server name to use when broadcasting to downstream clients
-	ServerName string
-
-	// Cached MOTD
-	motdCache []ircmsg.Message
-}
-
-// Downstream connection struct
-// This holds the state of connected clients
-type DownstreamConnection struct {
-	Conn net.Conn
-	Nick string
-
-	// These hold the signal for goroutines that are using this
-	// to exit on disconnect
-	Ctx    context.Context
-	Cancel context.CancelFunc
-
-	// Map of server supported caps to client support
-	Caps map[string]bool
-}
-
-type ChannelState struct {
-	Name  string
-	Topic string
-	// Key: Nickname (e.g. "Alice"), Value: Prefix (e.g. "@", "+", or "")
-	Users map[string]string
-	Modes string
-
-	// This is *technically* a UNIX timestamp but it's getting formatted
-	// into a string anyways, so why bother?
-	CreationTime string
-}
 
 // List of IRCv3 capabilities that we support
 var supportedCaps = map[string]bool{
@@ -86,6 +30,10 @@ func NewBouncer(upstream *ircevent.Connection) *Bouncer {
 }
 
 func (b *Bouncer) GetUpstreamConn() *ircevent.Connection {
+	if b.upstreamConn == nil {
+		log.Println("Returning NULL upstreamConn!")
+	}
+
 	return b.upstreamConn
 }
 
@@ -131,41 +79,6 @@ func (b *Bouncer) Route(ds *DownstreamConnection, msg ircmsg.Message) error {
 		return handler(b, ds, msg)
 	} else {
 		return &HandlerNotFound{msg.Command}
-	}
-}
-
-func (b *Bouncer) ListenDownstream(bindAddress string) {
-	log.Printf("Starting downstream accept loop for bindAddress %s", bindAddress)
-	listener, err := net.Listen("tcp", bindAddress)
-	if err != nil {
-		log.Fatalf("Failed to bind downstream port: %v", err)
-	}
-
-	log.Printf("Downstream listening on %s", bindAddress)
-
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			log.Println("Downstream accept error:", err)
-			continue
-		}
-
-		log.Printf("[downstream %s] Client connected", conn.RemoteAddr())
-		log.Printf("Client attached to bouncer %s", conn.RemoteAddr())
-		// Add context state
-		ctx, cancel := context.WithCancel(context.Background())
-
-		downstreamConn := &DownstreamConnection{
-			Conn:   conn,
-			Ctx:    ctx,
-			Cancel: cancel,
-			Caps:   make(map[string]bool),
-		}
-
-		b.DownstreamConnections = append(b.DownstreamConnections, downstreamConn)
-
-		// Spawn a dedicated goroutine for each client connection
-		go b.handleClient(downstreamConn)
 	}
 }
 
@@ -216,7 +129,7 @@ func (b *Bouncer) SendHistory(channel *string, ds *DownstreamConnection) {
 		err := b.SendToClient(ds, formsg)
 		if err != nil {
 			log.Printf("[downstream %s] Write failed during history, disconnecting", ds.Conn.RemoteAddr())
-			b.RemoveDownstreamConnection(ds)
+			b.DisconnectDownstreamConnection(ds, "broken client")
 			return // Exit the loop
 		}
 	}
@@ -255,20 +168,6 @@ func (b *Bouncer) ChangeDownstreamNick(newnick string) {
 
 		// Change internal state
 		ds.Nick = newnick
-	}
-}
-
-// Helper to separate prefixes from nicknames
-func parsePrefix(rawNick string) (nick string, prefix string) {
-	if len(rawNick) == 0 {
-		return "", ""
-	}
-	// Common IRC prefixes
-	switch rawNick[0] {
-	case '~', '&', '@', '%', '+':
-		return rawNick[1:], string(rawNick[0])
-	default:
-		return rawNick, ""
 	}
 }
 
@@ -316,6 +215,20 @@ func (b *Bouncer) IsJoined(channel string) bool {
 	}
 }
 
+func (b *Bouncer) DeleteChannel(channel string) {
+	b.mu.Lock()
+	_, exists := b.Channels[channel]
+	defer b.mu.Unlock()
+
+	// Hoeh?
+	if !exists {
+		log.Printf("DeleteChannel ran with non-existent channel!")
+		return
+	}
+
+	delete(b.Channels, channel)
+}
+
 func (b *Bouncer) SendDownstreamJoin(ds *DownstreamConnection, channel string) {
 	b.mu.RLock()
 	chState, exists := b.Channels[channel]
@@ -361,10 +274,6 @@ func (b *Bouncer) SendDownstreamJoin(ds *DownstreamConnection, channel string) {
 	b.SendHistory(&channel, ds)
 }
 
-func (b *Bouncer) DeleteChannel(channel string) {
-	delete(b.Channels, channel)
-}
-
 func (b *Bouncer) RemoveUserFromChannel(channel string, user string) {
 	// Get channel state
 	channelS := b.Channels[channel]
@@ -376,17 +285,33 @@ func (b *Bouncer) RemoveUserFromChannel(channel string, user string) {
 	delete(channelS.Users, user)
 }
 
-func (b *Bouncer) RemoveDownstreamConnection(ds *DownstreamConnection) {
+func (b *Bouncer) DisconnectDownstreamConnection(ds *DownstreamConnection, reason string) {
 	// Make sure we were given a valid pointer
 	if ds == nil {
 		panic("ds = nil")
 	}
 
+	// Set default reason
+	if reason == "" {
+		reason = "No Reason Given"
+	}
+
+	// Format the mandatory ERROR message trailing string
+	errorPayload := fmt.Sprintf("Closing Link: %s (Quit: %s)", ds.Nick, reason)
+
+	// Construct the message using ircmsg.MakeMessage
+	// ERROR takes exactly one parameter containing the explanation.
+	msg := ircmsg.MakeMessage(nil, "", "ERROR", errorPayload)
+
+	// Intentionally ignoring error here
+	_ = b.SendToClient(ds, msg)
+	log.Printf("[downstream %s] Sending ERROR to breaking client", ds.Conn.RemoteAddr())
+
 	// Cancel context
 	if ds.Cancel != nil {
 		ds.Cancel()
 	} else {
-		log.Printf("Downstream already cancelled???")
+		panic("Downstream already cancelled???")
 	}
 
 	// Close connection
@@ -454,7 +379,7 @@ func (b *Bouncer) ApplyModes(channel string, modeStr string, args []string) {
 			argIndex++
 
 			// Update the user's prefix in our state
-			prefix := b.modeToPrefix(char)
+			prefix := modeToPrefix(char)
 			curPrefix := ch.Users[targetNick]
 
 			if adding {
@@ -475,24 +400,6 @@ func (b *Bouncer) ApplyModes(channel string, modeStr string, args []string) {
 			// You can implement state tracking for these later if you want to replay
 			// them on client connect, but passing them through live is usually enough.
 		}
-	}
-}
-
-// Helper to map IRC mode characters to NAMES list prefixes
-func (b *Bouncer) modeToPrefix(mode rune) string {
-	switch mode {
-	case 'o':
-		return "@" // Operator
-	case 'v':
-		return "+" // Voice
-	case 'h':
-		return "%" // Half-Op
-	case 'a':
-		return "&" // Admin
-	case 'q':
-		return "~" // Founder
-	default:
-		return ""
 	}
 }
 
@@ -536,4 +443,12 @@ func (b *Bouncer) EchoToOtherClients(sender *DownstreamConnection, msg ircmsg.Me
 
 		b.SendToClient(ds, echoMsg)
 	}
+}
+
+func (b *Bouncer) AddDownstreamConnection(ds *DownstreamConnection) {
+	log.Printf("[downstream %s] Adding DownstreamConnection to list!", ds.Conn.RemoteAddr())
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	b.DownstreamConnections = append(b.DownstreamConnections, ds)
 }

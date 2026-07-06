@@ -14,6 +14,6 @@ func HandleQUIT(b *core.Bouncer, ds *core.DownstreamConnection, msg ircmsg.Messa
 	quitMsg := msg.Params[0]
 	log.Printf("[downstream %s] QUIT received with message %s", ds.Conn.RemoteAddr(), quitMsg)
 
-	b.RemoveDownstreamConnection(ds)
+	b.DisconnectDownstreamConnection(ds, quitMsg)
 	return nil
 }

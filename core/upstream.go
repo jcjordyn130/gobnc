@@ -33,6 +33,7 @@ func (b *Bouncer) ConnectToServer(conn *ircevent.Connection) (err error) {
 	upstreamHandlers.Register(b, "375", upstreamHandlers.Handle375) // MOTD Start
 	upstreamHandlers.Register(b, "372", upstreamHandlers.Handle372) // MOTD line
 	upstreamHandlers.Register(b, "376", upstreamHandlers.Handle376) // MOTD End
+	upstreamHandlers.Register(b, "PART", upstreamHandlers.HandlePART)
 
 	// Connect to the upstream server
 	err = conn.Connect()

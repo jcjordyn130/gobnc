@@ -160,7 +160,6 @@ func (b *Bouncer) sendJoinedChannels(ds *DownstreamConnection) {
 
 	prefix := fmt.Sprintf("%s!GHoSt@%s", ds.Nick, b.ServerName)
 
-	// TODO: split to own function
 	for _, chanState := range b.Channels {
 		log.Printf("[downstream %s] Sending JOIN for %s", ds.Conn.RemoteAddr(), chanState.Name)
 
@@ -219,7 +218,7 @@ func (b *Bouncer) sendOpenQueries(ds *DownstreamConnection) {
 			log.Printf("[downstream %s] Write failed during PM history: %v", ds.Conn.RemoteAddr(), err)
 			// If the socket dies, remove the client. This fires ds.Cancel(),
 			// which kills the SQLite query running in the DB worker.
-			b.RemoveDownstreamConnection(ds)
+			//b.DisconnectDownstreamConnection(ds, "Graceful")
 			return // Kill this goroutine
 		}
 	}
