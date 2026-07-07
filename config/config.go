@@ -19,6 +19,7 @@ type Config struct {
 	VerboseUpstream  bool   `mapstructure:"verbose_upstream"`
 	DBPath           string `mapstructure:"dbpath"`
 	MaxQLen          int    `mapstructure:"maxqlen"`
+	FIFOName         string `mapstructure:"fifoname"`
 }
 
 func LoadConfig() (*Config, error) {
@@ -45,6 +46,7 @@ func LoadConfig() (*Config, error) {
 	v.SetDefault("bind_address", "127.0.0.1:12345")
 	v.SetDefault("verbose_upstream", false)
 	v.SetDefault("MaxQLen", 5000)
+	v.SetDefault("fifoname", "")
 
 	// 4. Read the file
 	if err := v.ReadInConfig(); err != nil {

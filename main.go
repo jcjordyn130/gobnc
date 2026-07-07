@@ -32,7 +32,7 @@ func mainConnect() {
 		Server: fmt.Sprintf("%s:%d", conf.UpstreamServer, conf.UpstreamPort),
 		UseTLS: conf.UseTLS,
 		Nick:   conf.Nick,
-		Debug:  conf.Verbose,
+		Debug:  conf.VerboseUpstream,
 	}
 
 	if conf.IgnoreCerts {
@@ -66,7 +66,7 @@ func mainConnect() {
 	b.Register("PART", downstreamHandlers.HandlePART)
 
 	// Start FIFO handler
-	go listenFIFO(b)
+	go listenFIFO(b, conf.FIFOName)
 
 	// Connect to upstream server
 	err = b.ConnectToServer(&conn)
