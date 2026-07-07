@@ -67,6 +67,7 @@ func mainConnect(ctx context.Context) {
 	b.Register("JOIN", handlers.HandleJOIN)
 	b.Register("QUIT", downstreamHandlers.HandleQUIT)
 	b.Register("PART", downstreamHandlers.HandlePART)
+	b.Register("AWAY", downstreamHandlers.HandleAWAY)
 
 	// Start FIFO handler
 	go listenFIFO(b, conf.FIFOName)
