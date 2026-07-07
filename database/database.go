@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/ergochat/irc-go/ircmsg"
@@ -17,6 +18,7 @@ type DB struct {
 
 	conn     *sql.DB
 	LogQueue chan ircmsg.Message // Channel for async database writes
+	wg       sync.WaitGroup
 }
 
 type ChatMessage struct {
@@ -44,6 +46,9 @@ func NewDB(file string, maxQLen int) (*DB, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Add one to the sync group to allow for proper database teardown
+	db.wg.Add(1)
 
 	// Start goroutine for writing messages
 	go db.DatabaseWriter()
@@ -264,6 +269,8 @@ func (db *DB) GetMessages(source string, limit int) ([]ChatMessage, error) {
 
 // Dedicated goroutine for writing to SQLite
 func (db *DB) DatabaseWriter() {
+	defer db.wg.Done() // Signal that this goroutine is done when it exits
+
 	for {
 		// Wait for at least one message to arrive
 		msg, ok := <-db.LogQueue
@@ -376,5 +383,22 @@ func (db *DB) runMigrations() error {
 		}
 	}
 
+	return nil
+}
+
+func (db *DB) Close() error {
+	// Close the log queue channel to signal the writer goroutine to exit
+	// This causes ok = false when the channel is pulled from
+	close(db.LogQueue)
+
+	// Wait for the writer goroutine to finish
+	db.wg.Wait()
+
+	// Close the database connection
+	if err := db.conn.Close(); err != nil {
+		return fmt.Errorf("failed to close database connection: %w", err)
+	}
+
+	log.Debug().Msg("[database] Database closed successfully")
 	return nil
 }

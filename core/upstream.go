@@ -48,6 +48,7 @@ func (b *Bouncer) ConnectToServer(conn *ircevent.Connection) (err error) {
 	upstreamHandlers.Register(b, "338", upstreamHandlers.Handle338)
 	upstreamHandlers.Register(b, "317", upstreamHandlers.Handle317)
 	upstreamHandlers.Register(b, "318", upstreamHandlers.Handle318)
+	upstreamHandlers.Register(b, "330", upstreamHandlers.Handle330)
 
 	// Connect to the upstream server
 	err = conn.Connect()

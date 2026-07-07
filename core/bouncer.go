@@ -478,3 +478,34 @@ func (b *Bouncer) JoinAutoJoinChannels() error {
 	}
 	return nil
 }
+
+// Function does not return an error as we are already shutting down.
+// Therefore we just log the error and continue with the shutdown process.
+func (b *Bouncer) Shutdown() {
+	log.Info().Msg("Initiating graceful shutdown...")
+
+	// 1. Disconnect all downstream clients cleanly
+	// GetDownstreamConns() is safe as it returns a copy of the slice,
+	// preventing deadlock when DisconnectDownstreamConnection locks the array to remove them.
+	clients := b.GetDownstreamConns()
+	for _, ds := range clients {
+		log.Info().Msgf("Sending clean disconnect to downstream client %s", ds.Conn.RemoteAddr())
+		b.DisconnectDownstreamConnection(ds, "Bouncer shutting down")
+	}
+
+	// 2. Disconnect from upstream
+	if b.upstreamConn != nil && b.upstreamConn.Connected() {
+		log.Info().Msg("Sending QUIT to upstream server...")
+		quitmsg := ircmsg.MakeMessage(nil, "", "QUIT", "SIGINT/SIGTERM")
+		b.upstreamConn.SendIRCMessage(quitmsg)
+
+		// Give the TCP buffer a fraction of a second to flush the QUIT message
+		// before the process exits and destroys the socket.
+		time.Sleep(200 * time.Millisecond)
+
+		// Force socket closed so it does NOT attempt a reconnection
+		b.upstreamConn.Quit()
+	}
+
+	log.Info().Msg("Shutdown complete.")
+}

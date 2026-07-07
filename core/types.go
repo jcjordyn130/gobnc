@@ -18,7 +18,7 @@ type DownstreamCommandHandler func(b *Bouncer, ds *DownstreamConnection, msg irc
 type Bouncer struct {
 	upstreamConn          *ircevent.Connection
 	DownstreamConnections []*DownstreamConnection
-	DB                    database.DB
+	DB                    *database.DB
 	routes                map[string]DownstreamCommandHandler
 
 	// Holds a mapping of channel names to state structures

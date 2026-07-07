@@ -14,7 +14,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-func (b *Bouncer) ListenDownstream(bindAddress string) {
+func (b *Bouncer) ListenDownstream(ctx context.Context, bindAddress string) {
 	log.Debug().Msgf("Starting downstream accept loop for bindAddress %s", bindAddress)
 	listener, err := net.Listen("tcp", bindAddress)
 	if err != nil {
@@ -23,9 +23,21 @@ func (b *Bouncer) ListenDownstream(bindAddress string) {
 
 	log.Debug().Msgf("Downstream listening on %s", bindAddress)
 
+	// Start background goroutine to listen for context cancel
+	go func() {
+		<-ctx.Done()
+		log.Info().Msg("Context cancelled, closing downstream listener...")
+		listener.Close()
+	}()
+
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
+			if ctx.Err() != nil {
+				log.Debug().Msg("Exiting downstream accept loop due to context cancel")
+				return
+			}
+
 			log.Debug().Msgf("Downstream accept error: %v", err)
 			continue
 		}
@@ -33,11 +45,11 @@ func (b *Bouncer) ListenDownstream(bindAddress string) {
 		log.Debug().Msgf("[downstream %s] Client connected", conn.RemoteAddr())
 		log.Debug().Msgf("Client attached to bouncer %s", conn.RemoteAddr())
 		// Add context state
-		ctx, cancel := context.WithCancel(context.Background())
+		clientCtx, cancel := context.WithCancel(ctx)
 
 		downstreamConn := &DownstreamConnection{
 			Conn:   conn,
-			Ctx:    ctx,
+			Ctx:    clientCtx,
 			Cancel: cancel,
 			Caps:   make(map[string]bool),
 		}

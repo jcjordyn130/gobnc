@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"os"
+	"os/signal"
 	"syscall"
 
 	"bouncer/config"
@@ -22,7 +23,7 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-func mainConnect() {
+func mainConnect(ctx context.Context) {
 	conf, err := config.LoadConfig()
 	if err != nil {
 		panic(err)
@@ -52,7 +53,9 @@ func mainConnect() {
 	if err != nil {
 		panic(err)
 	}
-	b.DB = *bdb
+
+	// Assign the DB pointer to avoid copying sync primitives (sync.WaitGroup/noCopy)
+	b.DB = bdb
 
 	// Register downstream handlers
 	// These are commands sent by clients connected to us
@@ -79,7 +82,15 @@ func mainConnect() {
 	go conn.Loop()
 
 	// Start downstream listener
-	b.ListenDownstream("127.0.0.1:12345")
+	b.ListenDownstream(ctx, "127.0.0.1:12345")
+
+	// Something causes ListenDownsteam to return (most likely our context), shutdown the bouncer
+	b.Shutdown()
+
+	// Don't forget the database
+	bdb.Close()
+
+	log.Debug().Msg("Byebye :)")
 }
 
 func listenFIFO(b *core.Bouncer, fifoName string) {
@@ -130,6 +141,10 @@ func listenFIFO(b *core.Bouncer, fifoName string) {
 func main() {
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 
+	// Create context to safely close all of the goroutines when the program is terminated
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
 	conf, err := config.LoadConfig()
 	if err != nil {
 		panic(err)
@@ -149,7 +164,7 @@ func main() {
 				Name:  "connect",
 				Usage: "connect to the upstream server and start the bouncer",
 				Action: func(c context.Context, cmd *cli.Command) error {
-					mainConnect()
+					mainConnect(c)
 					return nil
 				},
 			},
@@ -202,7 +217,7 @@ func main() {
 		},
 	}
 
-	if err := cmd.Run(context.Background(), os.Args); err != nil {
+	if err := cmd.Run(ctx, os.Args); err != nil {
 		log.Fatal().Msgf("Error running command: %v", err)
 	}
 }
