@@ -29,7 +29,7 @@ func AsyncStreamQuery[T any](
 		// 1. Execute the query
 		rows, err := db.QueryContext(ctx, query, args...)
 		if err != nil {
-			log.Debug().Msgf("[DEBUG-DB] Query execution failed: %v", err)
+			log.Debug().Msgf("[database] Query execution failed: %v", err)
 			errChan <- err
 			return
 		}
@@ -51,15 +51,15 @@ func AsyncStreamQuery[T any](
 			select {
 			case msgChan <- item:
 			case <-ctx.Done():
-				log.Debug().Msgf("[DEBUG-DB] Context cancelled! Aborting stream.")
+				log.Debug().Msgf("[database] Context cancelled! Aborting stream.")
 				errChan <- ctx.Err()
 				return
 			}
 		}
 
-		log.Debug().Msgf("[DEBUG-DB] Finished iterating. Total rows processed: %d", rowCount)
+		log.Debug().Msgf("[database] Finished iterating. Total rows processed: %d", rowCount)
 		if err := rows.Err(); err != nil {
-			log.Debug().Msgf("[DEBUG-DB] Error during row iteration: %v", err)
+			log.Debug().Msgf("[database] Error during row iteration: %v", err)
 			errChan <- err
 		}
 	}()

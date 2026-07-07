@@ -197,12 +197,17 @@ func (b *Bouncer) sendOpenQueries(ds *DownstreamConnection) {
 
 	for chatMsg := range msgChan {
 		recvCount++
-		log.Debug().Msgf("[DEBUG-CLIENT] Received message %d from DB channel", recvCount)
 		// Rewrite historical notices as private messages so clients
 		// like HexChat are forced to open a query window for them.
 		playbackCmd := chatMsg.Command
 		if playbackCmd == "NOTICE" {
 			playbackCmd = "PRIVMSG"
+		}
+
+		// Skip replying direct CTCP messages if they somehow ended up in the backlog.
+		if strings.HasPrefix(chatMsg.Content, "\x01") {
+			log.Debug().Msgf("[downstream %s] Skipping direct CTCP message from DB channel: %s", ds.Conn.RemoteAddr(), chatMsg.Content)
+			continue
 		}
 
 		forMsg := ircmsg.MakeMessage(nil, chatMsg.Source, playbackCmd, ds.Nick, chatMsg.Content)
@@ -223,12 +228,12 @@ func (b *Bouncer) sendOpenQueries(ds *DownstreamConnection) {
 		}
 	}
 
-	log.Debug().Msgf("[DEBUG-CLIENT] Message channel closed. Total received: %d. Waiting for error channel...", recvCount)
+	log.Debug().Msgf("[downstream %s] Message channel closed. Total received: %d. Waiting for error channel...", ds.Conn.RemoteAddr(), recvCount)
 
 	if err := <-errChan; err != nil {
-		log.Debug().Msgf("[DEBUG-CLIENT] Stream ended with error: %v", err)
+		log.Debug().Msgf("[downstream %s] Stream ended with error: %v", ds.Conn.RemoteAddr(), err)
 	} else {
-		log.Debug().Msgf("[DEBUG-CLIENT] SUCCESS! Stream ended cleanly with no errors.")
+		log.Debug().Msgf("[downstream %s] SUCCESS! Stream ended cleanly with no errors.", ds.Conn.RemoteAddr())
 	}
 }
 
