@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"bouncer/config"
 	"bouncer/core"
@@ -85,10 +86,31 @@ func mainConnect(ctx context.Context) {
 	// Start downstream listener
 	b.ListenDownstream(ctx, "127.0.0.1:12345")
 
-	// Something causes ListenDownsteam to return (most likely our context), shutdown the bouncer
-	b.Shutdown()
+	log.Info().Msg("Gracefully shutting down... This may take up to 30 seconds.")
+
+	// Create time based context for shutdown
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Duration(conf.GracefulShutdownTimeout)*time.Second)
+	defer cancel()
+
+	// Create a channel to listen for the shutdown signal
+	// Using as a dumb signal, type doesn't matter here
+	shutdownChan := make(chan int)
+
+	go func() {
+		// Something causes ListenDownsteam to return (most likely our context), shutdown the bouncer
+		b.Shutdown()
+		close(shutdownChan)
+	}()
+
+	select {
+	case <-shutdownChan:
+		log.Info().Msg("Graceful shutdown complete.")
+	case <-shutdownCtx.Done():
+		log.Warn().Msg("Timeout reached... forcing all connections closed")
+	}
 
 	// Don't forget the database
+	log.Debug().Msg("Closing database")
 	bdb.Close()
 
 	log.Debug().Msg("Byebye :)")

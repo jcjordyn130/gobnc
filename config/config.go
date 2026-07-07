@@ -8,18 +8,19 @@ import (
 )
 
 type Config struct {
-	UpstreamServer   string `mapstructure:"upstream_server"`
-	UpstreamPort     int    `mapstructure:"upstream_port"`
-	UpstreamPassword string `mapstructure:"upstream_password"`
-	UseTLS           bool   `mapstructure:"usetls"`
-	IgnoreCerts      bool   `mapstructure:"ignorecerts"`
-	Nick             string `mapstructure:"nick"`
-	Password         string `mapstructure:"password"`
-	BindAddress      string `mapstructure:"bind_address"`
-	VerboseUpstream  bool   `mapstructure:"verbose_upstream"`
-	DBPath           string `mapstructure:"dbpath"`
-	MaxQLen          int    `mapstructure:"maxqlen"`
-	FIFOName         string `mapstructure:"fifoname"`
+	UpstreamServer          string `mapstructure:"upstream_server"`
+	UpstreamPort            int    `mapstructure:"upstream_port"`
+	UpstreamPassword        string `mapstructure:"upstream_password"`
+	UseTLS                  bool   `mapstructure:"usetls"`
+	IgnoreCerts             bool   `mapstructure:"ignorecerts"`
+	Nick                    string `mapstructure:"nick"`
+	Password                string `mapstructure:"password"`
+	BindAddress             string `mapstructure:"bind_address"`
+	VerboseUpstream         bool   `mapstructure:"verbose_upstream"`
+	DBPath                  string `mapstructure:"dbpath"`
+	MaxQLen                 int    `mapstructure:"maxqlen"`
+	GracefulShutdownTimeout int    `mapstructure:"graceful_shutdown_timeout"`
+	FIFOName                string `mapstructure:"fifoname"`
 }
 
 func LoadConfig() (*Config, error) {
@@ -47,6 +48,7 @@ func LoadConfig() (*Config, error) {
 	v.SetDefault("verbose_upstream", false)
 	v.SetDefault("MaxQLen", 5000)
 	v.SetDefault("fifoname", "")
+	v.SetDefault("graceful_shutdown_timeout", 30)
 
 	// 4. Read the file
 	if err := v.ReadInConfig(); err != nil {
