@@ -30,7 +30,7 @@ func modeToPrefix(mode rune) string {
 	case 'q':
 		return "~" // Founder
 	default:
-		log.Debug().Msgf("Invalid rune %s receieved for modeToPrefix", mode)
+		log.Debug().Msgf("Invalid rune %c receieved for modeToPrefix", mode)
 		return ""
 	}
 }
