@@ -59,7 +59,7 @@ func HandleWHO(b *core.Bouncer, ds *core.DownstreamConnection, msg ircmsg.Messag
 	if !upstream.Connected() {
 		return DisConnHandleWHO(b, ds, msg)
 	} else {
-		// TODO: implement
-		return nil
+		// Forward the WHO command to the upstream server
+		return b.GetUpstreamConn().SendIRCMessage(msg)
 	}
 }
