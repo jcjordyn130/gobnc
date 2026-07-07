@@ -53,6 +53,9 @@ type DownstreamConnection struct {
 	// Whether or not the handshake has completed (USER/NICK/CAP negotiation)
 	// This is toggled right after RPL_001 is sent to the client
 	HandshakeComplete bool
+
+	// internal channel to use for messages
+	msgChan chan ircmsg.Message
 }
 
 type ChannelState struct {
