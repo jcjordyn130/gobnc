@@ -18,7 +18,7 @@ func handleDisconnect(b *core.Bouncer, ds *core.DownstreamConnection, msg ircmsg
 	// We can't connect to an already connected server
 	if !upstream.Connected() {
 		rawmsg := ircmsg.MakeMessage(nil, "*status", "PRIVMSG", "Upstream is already not connected!")
-		b.SendToClient(ds, rawmsg)
+		ds.SendToClient(rawmsg)
 		return nil
 	}
 

@@ -65,7 +65,7 @@ func (b *Bouncer) handleHandshake(reader ircreader.Reader, ds *DownstreamConnect
 
 				capMsg := ircmsg.MakeMessage(nil, b.ServerName, "CAP", "*", "LS", lsString)
 				log.Debug().Msgf("[downstream %s] Sending CAP LS: %s", ds.Conn.RemoteAddr(), lsString)
-				b.SendToClient(ds, capMsg)
+				ds.SendToClient(capMsg)
 			} else if subCommand == "REQ" && len(msg.Params) > 1 {
 				requestedCaps := msg.Params[1]
 
@@ -95,14 +95,14 @@ func (b *Bouncer) handleHandshake(reader ircreader.Reader, ds *DownstreamConnect
 				if len(ackedCaps) > 0 {
 					ackStr := strings.Join(ackedCaps, " ")
 					capMsg := ircmsg.MakeMessage(nil, b.ServerName, "CAP", "*", "ACK", ackStr)
-					b.SendToClient(ds, capMsg)
+					ds.SendToClient(capMsg)
 				}
 
 				// Batch send the NAKs (declined capabilities)
 				if len(nakedCaps) > 0 {
 					nakStr := strings.Join(nakedCaps, " ")
 					capMsg := ircmsg.MakeMessage(nil, b.ServerName, "CAP", "*", "NAK", nakStr)
-					b.SendToClient(ds, capMsg)
+					ds.SendToClient(capMsg)
 				}
 			} else if subCommand == "END" {
 				log.Debug().Msgf("[downstream %s] cap negotiation end", ds.Conn.RemoteAddr())
@@ -134,11 +134,11 @@ func (b *Bouncer) handleHandshake(reader ircreader.Reader, ds *DownstreamConnect
 		log.Debug().Msgf("[downstream %s] sending upstream nick %s to client", ds.Conn.RemoteAddr(), b.upstreamConn.CurrentNick())
 		rplWelcome := ircmsg.MakeMessage(nil, b.ServerName, "001", b.upstreamConn.CurrentNick(), "Welcome to the Golang BNC!")
 		ds.Nick = b.upstreamConn.CurrentNick()
-		b.SendToClient(ds, rplWelcome)
+		ds.SendToClient(rplWelcome)
 	} else {
 		log.Debug().Msgf("[downstream %s] sending client nick %s to client due to no connection!", ds.Conn.RemoteAddr(), ds.Nick)
 		rplWelcome := ircmsg.MakeMessage(nil, b.ServerName, "001", ds.Nick, "Welcome to the Golang BNC!")
-		b.SendToClient(ds, rplWelcome)
+		ds.SendToClient(rplWelcome)
 	}
 
 	// Set connection state to handshake complete
@@ -179,21 +179,21 @@ func (b *Bouncer) sendJoinedChannels(ds *DownstreamConnection) {
 		log.Debug().Msgf("[downstream %s] Sending JOIN for %s", ds.Conn.RemoteAddr(), chanState.Name)
 
 		joinMsg := ircmsg.MakeMessage(nil, prefix, "JOIN", chanState.Name)
-		b.SendToClient(ds, joinMsg)
+		ds.SendToClient(joinMsg)
 
 		// 2. The Topic (332)
 		if chanState.Topic != "" {
-			b.SendToClient(ds, ircmsg.MakeMessage(nil, b.ServerName, "332", ds.Nick, chanState.Name, chanState.Topic))
+			ds.SendToClient(ircmsg.MakeMessage(nil, b.ServerName, "332", ds.Nick, chanState.Name, chanState.Topic))
 		}
 
 		// 3. Channel Modes (324)
 		if chanState.Modes != "" {
-			b.SendToClient(ds, ircmsg.MakeMessage(nil, b.ServerName, "324", ds.Nick, chanState.Name, chanState.Modes))
+			ds.SendToClient(ircmsg.MakeMessage(nil, b.ServerName, "324", ds.Nick, chanState.Name, chanState.Modes))
 		}
 
 		// 4. Creation Time (329)
 		if chanState.CreationTime != "" {
-			b.SendToClient(ds, ircmsg.MakeMessage(nil, b.ServerName, "329", ds.Nick, chanState.Name, chanState.CreationTime))
+			ds.SendToClient(ircmsg.MakeMessage(nil, b.ServerName, "329", ds.Nick, chanState.Name, chanState.CreationTime))
 		}
 
 		// Send /NAMES list
@@ -234,7 +234,7 @@ func (b *Bouncer) sendOpenQueries(ds *DownstreamConnection) {
 		}
 
 		// Send to the downstream client
-		if err := b.SendToClient(ds, forMsg); err != nil {
+		if err := ds.SendToClient(forMsg); err != nil {
 			log.Debug().Msgf("[downstream %s] Write failed during PM history: %v", ds.Conn.RemoteAddr(), err)
 			// If the socket dies, remove the client. This fires ds.Cancel(),
 			// which kills the SQLite query running in the DB worker.
@@ -282,7 +282,7 @@ func (b *Bouncer) sendNamesList(ds *DownstreamConnection, chState *ChannelState)
 			// Flush the current chunk to the client
 			namesStr := strings.Join(currentChunk, " ")
 			namesMsg := ircmsg.MakeMessage(nil, b.ServerName, "353", ds.Nick, "=", chState.Name, namesStr)
-			b.SendToClient(ds, namesMsg)
+			ds.SendToClient(namesMsg)
 
 			// Reset the chunker efficiently without reallocating memory
 			currentChunk = currentChunk[:0]
@@ -297,10 +297,10 @@ func (b *Bouncer) sendNamesList(ds *DownstreamConnection, chState *ChannelState)
 	if len(currentChunk) > 0 {
 		namesStr := strings.Join(currentChunk, " ")
 		namesMsg := ircmsg.MakeMessage(nil, b.ServerName, "353", ds.Nick, "=", chState.Name, namesStr)
-		b.SendToClient(ds, namesMsg)
+		ds.SendToClient(namesMsg)
 	}
 
 	// 4. End of Names (366)
 	endMsg := ircmsg.MakeMessage(nil, b.ServerName, "366", ds.Nick, chState.Name, "End of /NAMES list.")
-	b.SendToClient(ds, endMsg)
+	ds.SendToClient(endMsg)
 }

@@ -13,6 +13,6 @@ func HandlePING(b *core.Bouncer, ds *core.DownstreamConnection, msg ircmsg.Messa
 	// You now have full access to b.UpstreamConn!
 	pong := ircmsg.MakeMessage(nil, b.ServerName, "PONG", b.ServerName, token)
 
-	b.SendToClient(ds, pong)
+	ds.SendToClient(pong)
 	return nil
 }
