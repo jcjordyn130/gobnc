@@ -84,18 +84,41 @@ func (b *Bouncer) Route(ds *DownstreamConnection, msg ircmsg.Message) error {
 	}
 }
 
+func (b *Bouncer) StartAsyncClientWriter(ds *DownstreamConnection) {
+	ds.msgChan = make(chan ircmsg.Message)
+
+	go func() {
+		for {
+			// Get message from channel
+			msg, ok := <-ds.msgChan
+			if !ok {
+				log.Debug().Msgf("[downstream %s] Exiting AsyncClientWriter loop due to !ok on channel", ds.Conn.RemoteAddr())
+				break
+			}
+
+			// Get message
+			ircmsgb, err := msg.LineBytes()
+			if err != nil {
+				log.Error().Msgf("[downstream %s] Error sending response: %v", ds.Conn.RemoteAddr(), err)
+				continue
+			}
+
+			// Send message
+			_, err = ds.Conn.Write(ircmsgb)
+			if err != nil {
+				log.Error().Msgf("[downstream %s] Error sending response: %v", ds.Conn.RemoteAddr(), err)
+				continue
+			}
+		}
+	}()
+}
+
 func (b *Bouncer) SendToClient(ds *DownstreamConnection, ircmsg ircmsg.Message) error {
-	ircmsgb, err := ircmsg.LineBytes()
-	if err != nil {
-		log.Debug().Msgf("[downstream %s] Error sending response: %v", ds.Conn.RemoteAddr(), err)
-		return err
+	if ds.msgChan == nil {
+		panic("test")
 	}
 
-	_, err = ds.Conn.Write(ircmsgb)
-	if err != nil {
-		log.Debug().Msgf("[downstream %s] Error sending response: %v", ds.Conn.RemoteAddr(), err)
-		return err
-	}
+	ds.msgChan <- ircmsg
 
 	return nil
 }
