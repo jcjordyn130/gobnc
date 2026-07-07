@@ -72,7 +72,7 @@ func (b *Bouncer) handleClient(ds *DownstreamConnection) {
 	clientReader := ircreader.NewIRCReader(ds.Conn)
 
 	// Start async client writer
-	b.StartAsyncClientWriter(ds)
+	ds.StartAsyncClientWriter()
 
 	// Start handshake
 	b.handleHandshake(*clientReader, ds)
