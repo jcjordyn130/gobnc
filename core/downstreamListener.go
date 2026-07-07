@@ -44,14 +44,16 @@ func (b *Bouncer) ListenDownstream(ctx context.Context, bindAddress string) {
 
 		log.Debug().Msgf("[downstream %s] Client connected", conn.RemoteAddr())
 		log.Debug().Msgf("Client attached to bouncer %s", conn.RemoteAddr())
+
 		// Add context state
 		clientCtx, cancel := context.WithCancel(ctx)
 
 		downstreamConn := &DownstreamConnection{
-			Conn:   conn,
-			Ctx:    clientCtx,
-			Cancel: cancel,
-			Caps:   make(map[string]bool),
+			Conn:              conn,
+			Ctx:               clientCtx,
+			Cancel:            cancel,
+			Caps:              make(map[string]bool),
+			HandshakeComplete: false,
 		}
 
 		b.AddDownstreamConnection(downstreamConn)
@@ -71,10 +73,6 @@ func (b *Bouncer) handleClient(ds *DownstreamConnection) {
 
 	// Start handshake
 	b.handleHandshake(*clientReader, ds)
-
-	// Send message history
-	// TODO: how to send DM history?
-	//b.SendHistory(ds)
 
 	// If we aren't connected to the upstream server, let the client know!
 	if b.GetUpstreamConn() == nil {

@@ -128,8 +128,11 @@ func (b *Bouncer) handleHandshake(reader ircreader.Reader, ds *DownstreamConnect
 	}
 
 	// Send RPL_001 WELCOME
-	rplWelcome := ircmsg.MakeMessage(nil, b.ServerName, "001", ds.Nick, "Welcome to the Golang BNC!")
+	rplWelcome := ircmsg.MakeMessage(nil, b.ServerName, "001", b.upstreamConn.CurrentNick(), "Welcome to the Golang BNC!")
 	b.SendToClient(ds, rplWelcome)
+
+	// Set connection state to handshake complete
+	ds.HandshakeComplete = true
 
 	// Send MOTD
 	b.SendCachedMOTD(ds)

@@ -157,8 +157,31 @@ func (b *Bouncer) BroadcastToClients(msg ircmsg.Message) {
 	b.ds_mu.RUnlock()
 
 	for _, ds := range activeClients {
-		log.Debug().Msgf("[downstream %s] Forwarding message to active client!", ds.Conn.RemoteAddr())
-		go b.SendToClient(ds, msg)
+		if ds.HandshakeComplete {
+			log.Debug().Msgf("[downstream %s] Forwarding message to active client!", ds.Conn.RemoteAddr())
+		} else {
+			log.Debug().Msgf("[downstream %s] Skipping message to client that has not completed handshake!", ds.Conn.RemoteAddr())
+			continue
+		}
+
+		// Copy message so we can modify it for each client if needed (e.g., add server-time)
+		clientMsg := msg
+
+		// Strict clients drop numerics if the prefix doesn't match what the bouncer is, so lets spoof it
+		if len(clientMsg.Command) == 3 && clientMsg.Command[0] >= '0' && clientMsg.Command[0] <= '9' {
+			log.Debug().Msgf("[downstream %s] Spoofing prefix for numeric %s to bouncer server name %s", ds.Conn.RemoteAddr(), clientMsg.Command, b.ServerName)
+			clientMsg.Source = b.ServerName
+
+			if len(clientMsg.Params) > 0 {
+				log.Debug().Msgf("[downstream %s] Replacing first param %s with downstream nick %s", ds.Conn.RemoteAddr(), clientMsg.Params[0], ds.Nick)
+				newParams := make([]string, len(clientMsg.Params))
+				copy(newParams, clientMsg.Params)
+				newParams[0] = ds.Nick // Replace the first param with the client's nick
+				clientMsg.Params = newParams
+			}
+		}
+
+		go b.SendToClient(ds, clientMsg)
 	}
 }
 

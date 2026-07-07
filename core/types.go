@@ -49,6 +49,10 @@ type DownstreamConnection struct {
 
 	// Map of server supported caps to client support
 	Caps map[string]bool
+
+	// Whether or not the handshake has completed (USER/NICK/CAP negotiation)
+	// This is toggled right after RPL_001 is sent to the client
+	HandshakeComplete bool
 }
 
 type ChannelState struct {
