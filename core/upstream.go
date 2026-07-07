@@ -40,6 +40,10 @@ func (b *Bouncer) ConnectToServer(conn *ircevent.Connection) (err error) {
 	upstreamHandlers.Register(b, "900", upstreamHandlers.Handle900) // RPL_LOGGEDIN
 	upstreamHandlers.Register(b, "302", upstreamHandlers.Handle302) // RPL_USERHOST
 
+	upstreamHandlers.Register(b, "324", upstreamHandlers.Handle324) // Channel modes (e.g. +Cnst)
+	upstreamHandlers.Register(b, "367", upstreamHandlers.Handle367) // Banlist item
+	upstreamHandlers.Register(b, "368", upstreamHandlers.Handle368) // End of banlist
+
 	// WHOIS related handlers
 	upstreamHandlers.Register(b, "311", upstreamHandlers.Handle311)
 	upstreamHandlers.Register(b, "319", upstreamHandlers.Handle319)
