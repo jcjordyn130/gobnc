@@ -84,36 +84,6 @@ func (b *Bouncer) Route(ds *DownstreamConnection, msg ircmsg.Message) error {
 	}
 }
 
-func (b *Bouncer) StartAsyncClientWriter(ds *DownstreamConnection) {
-	ds.msgChan = make(chan ircmsg.Message)
-
-	go func() {
-		for {
-			// Get message from channel
-			msg, ok := <-ds.msgChan
-			if !ok {
-				log.Debug().Msgf("[downstream %s] Exiting AsyncClientWriter loop due to !ok on channel", ds.Conn.RemoteAddr())
-				break
-			}
-
-			// Get message
-			ircmsgb, err := msg.LineBytes()
-			if err != nil {
-				log.Error().Msgf("[downstream %s] Error sending response: %v", ds.Conn.RemoteAddr(), err)
-				continue
-			}
-
-			// Send message
-			_, err = ds.Conn.Write(ircmsgb)
-			log.Debug().Msgf("[downstream %s] [ASYNC] Sending message: %v", ds.Conn.RemoteAddr(), msg)
-			if err != nil {
-				log.Error().Msgf("[downstream %s] Error sending response: %v", ds.Conn.RemoteAddr(), err)
-				continue
-			}
-		}
-	}()
-}
-
 func (b *Bouncer) SendHistory(channel *string, ds *DownstreamConnection) {
 	var msgChan <-chan database.ChatMessage
 	var errChan <-chan error
@@ -353,16 +323,14 @@ func (b *Bouncer) DisconnectDownstreamConnection(ds *DownstreamConnection, reaso
 	_ = ds.SendToClient(msg)
 	log.Debug().Msgf("[downstream %s] Sending ERROR to breaking client", ds.Conn.RemoteAddr())
 
+	// Close connection
+	ds.Close()
+
 	// Cancel context
 	if ds.Cancel != nil {
 		ds.Cancel()
 	} else {
 		panic("Downstream already cancelled???")
-	}
-
-	// Close connection
-	if ds.Conn != nil {
-		_ = ds.Conn.Close()
 	}
 
 	log.Debug().Msgf("[downstream %s] Removing DownstreamConnection", ds.Conn.RemoteAddr())
