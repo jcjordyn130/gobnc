@@ -498,6 +498,10 @@ func (b *Bouncer) JoinAutoJoinChannels() error {
 			log.Debug().Msgf("[upstream %s] Error joining autojoin channel %s: %v", b.GetUpstreamConn().Server, channel, err)
 			return err
 		}
+
+		// Wait a bit to avoid flooding the upstream server with JOINs
+		// TODO: Make this configurable in the future
+		time.Sleep(500 * time.Millisecond)
 	}
 	return nil
 }

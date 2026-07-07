@@ -7,6 +7,7 @@ package core
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 	"time"
 
@@ -116,7 +117,8 @@ func (b *Bouncer) handleHandshake(reader ircreader.Reader, ds *DownstreamConnect
 
 		case "USER":
 			if len(msg.Params) >= 4 {
-				log.Debug().Msgf("[downstream %s] received USER command", ds.Conn.RemoteAddr())
+				// TODO: maybe we should store the username and realname somewhere? idk
+				log.Debug().Msgf("[downstream %s] received USER command %s", ds.Conn.RemoteAddr(), msg.Params[0])
 			}
 		}
 
@@ -166,12 +168,14 @@ func (b *Bouncer) handleHandshake(reader ircreader.Reader, ds *DownstreamConnect
 }
 
 func (b *Bouncer) sendJoinedChannels(ds *DownstreamConnection) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
 	prefix := fmt.Sprintf("%s!GHoSt@%s", ds.Nick, b.ServerName)
 
-	for _, chanState := range b.Channels {
+	// Duplicate the channels map to avoid holding up the client loop
+	b.mu.Lock()
+	channels := maps.Clone(b.Channels)
+	b.mu.Unlock()
+
+	for _, chanState := range channels {
 		log.Debug().Msgf("[downstream %s] Sending JOIN for %s", ds.Conn.RemoteAddr(), chanState.Name)
 
 		joinMsg := ircmsg.MakeMessage(nil, prefix, "JOIN", chanState.Name)
@@ -196,7 +200,7 @@ func (b *Bouncer) sendJoinedChannels(ds *DownstreamConnection) {
 		b.sendNamesList(ds, chanState)
 
 		// Send history
-		b.SendHistory(&chanState.Name, ds)
+		go b.SendHistory(&chanState.Name, ds)
 	}
 }
 
@@ -249,7 +253,7 @@ func (b *Bouncer) sendOpenQueries(ds *DownstreamConnection) {
 }
 
 func (b *Bouncer) sendNamesList(ds *DownstreamConnection, chState *ChannelState) {
-	// WARN: this function assumes the caller already holds the b.mu lock!
+	// b.mu lock is needed if the caller does NOT clone the channels map.
 
 	log.Debug().Msgf("[downstream %s] Sending /NAMES for %s", ds.Conn.RemoteAddr(), chState.Name)
 
