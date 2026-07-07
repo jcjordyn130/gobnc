@@ -43,6 +43,7 @@ func (b *Bouncer) ConnectToServer(conn *ircevent.Connection) (err error) {
 	upstreamHandlers.Register(b, "324", upstreamHandlers.Handle324) // Channel modes (e.g. +Cnst)
 	upstreamHandlers.Register(b, "367", upstreamHandlers.Handle367) // Banlist item
 	upstreamHandlers.Register(b, "368", upstreamHandlers.Handle368) // End of banlist
+	upstreamHandlers.Register(b, "421", upstreamHandlers.Handle421) // RPL_UNKNOWNCOMMAND
 
 	// WHOIS related handlers
 	upstreamHandlers.Register(b, "311", upstreamHandlers.Handle311)
@@ -53,6 +54,8 @@ func (b *Bouncer) ConnectToServer(conn *ircevent.Connection) (err error) {
 	upstreamHandlers.Register(b, "317", upstreamHandlers.Handle317)
 	upstreamHandlers.Register(b, "318", upstreamHandlers.Handle318)
 	upstreamHandlers.Register(b, "330", upstreamHandlers.Handle330)
+
+	upstreamHandlers.Register(b, "QUIT", upstreamHandlers.HandleQUIT)
 
 	// Connect to the upstream server
 	err = conn.Connect()

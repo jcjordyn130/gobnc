@@ -128,8 +128,16 @@ func (b *Bouncer) handleHandshake(reader ircreader.Reader, ds *DownstreamConnect
 	}
 
 	// Send RPL_001 WELCOME
-	rplWelcome := ircmsg.MakeMessage(nil, b.ServerName, "001", b.upstreamConn.CurrentNick(), "Welcome to the Golang BNC!")
-	b.SendToClient(ds, rplWelcome)
+	if b.upstreamConn.Connected() {
+		log.Debug().Msgf("[downstream %s] sending upstream nick %s to client", ds.Conn.RemoteAddr(), b.upstreamConn.CurrentNick())
+		rplWelcome := ircmsg.MakeMessage(nil, b.ServerName, "001", b.upstreamConn.CurrentNick(), "Welcome to the Golang BNC!")
+		ds.Nick = b.upstreamConn.CurrentNick()
+		b.SendToClient(ds, rplWelcome)
+	} else {
+		log.Debug().Msgf("[downstream %s] sending client nick %s to client due to no connection!", ds.Conn.RemoteAddr(), ds.Nick)
+		rplWelcome := ircmsg.MakeMessage(nil, b.ServerName, "001", ds.Nick, "Welcome to the Golang BNC!")
+		b.SendToClient(ds, rplWelcome)
+	}
 
 	// Set connection state to handshake complete
 	ds.HandshakeComplete = true
@@ -140,12 +148,12 @@ func (b *Bouncer) handleHandshake(reader ircreader.Reader, ds *DownstreamConnect
 	// Send current upstream nick
 	// Not *technically* needed but some older clients don't listen to 001
 	// and it makes the handshake code cleaner
-	if b.upstreamConn.Connected() {
-		log.Debug().Msgf("[downstream %s] Changing nick from client given %s to upstream %s", ds.Conn.RemoteAddr(), ds.Nick, b.upstreamConn.CurrentNick())
-		b.ChangeDownstreamNick(b.upstreamConn.CurrentNick())
-	} else {
-		log.Debug().Msgf("[downstream %s] Not sending upstream nick as we aren't connected!", ds.Conn.RemoteAddr())
-	}
+	//if b.upstreamConn.Connected() {
+	//	log.Debug().Msgf("[downstream %s] Changing nick from client given %s to upstream %s", ds.Conn.RemoteAddr(), ds.Nick, b.upstreamConn.CurrentNick())
+	//	b.ChangeDownstreamNick(b.upstreamConn.CurrentNick())
+	//} else {
+	//	log.Debug().Msgf("[downstream %s] Not sending upstream nick as we aren't connected!", ds.Conn.RemoteAddr())
+	//}
 
 	// Send channel joins
 	go b.sendJoinedChannels(ds)

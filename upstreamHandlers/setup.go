@@ -25,6 +25,7 @@ type Router interface {
 	ClearMOTD()
 	CacheMOTD(msg ircmsg.Message)
 	JoinAutoJoinChannels() error
+	RemoveUserFromAllChannels(nick string)
 }
 
 type UpstreamCommandHandler func(b Router, msg ircmsg.Message) error

@@ -519,16 +519,26 @@ func (b *Bouncer) Shutdown() {
 	// 2. Disconnect from upstream
 	if b.upstreamConn != nil && b.upstreamConn.Connected() {
 		log.Info().Msg("Sending QUIT to upstream server...")
-		quitmsg := ircmsg.MakeMessage(nil, "", "QUIT", "SIGINT/SIGTERM")
-		b.upstreamConn.SendIRCMessage(quitmsg)
+		b.upstreamConn.QuitMessage = "Shutdown() called"
+		b.upstreamConn.Quit()
 
 		// Give the TCP buffer a fraction of a second to flush the QUIT message
 		// before the process exits and destroys the socket.
 		time.Sleep(200 * time.Millisecond)
-
-		// Force socket closed so it does NOT attempt a reconnection
-		b.upstreamConn.Quit()
 	}
 
 	log.Info().Msg("Shutdown complete.")
+}
+
+func (b *Bouncer) RemoveUserFromAllChannels(nick string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	for _, ch := range b.Channels {
+		if _, exists := ch.Users[nick]; exists {
+			// delete() is safe even if nick doesn't exist in the Users map
+			delete(ch.Users, nick)
+			log.Debug().Msgf("[bouncer] Removed user %s from channel %s", nick, ch.Name)
+		}
+	}
 }
