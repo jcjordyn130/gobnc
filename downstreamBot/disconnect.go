@@ -3,7 +3,7 @@
 package downstreambot
 
 import (
-	"log"
+	"github.com/rs/zerolog/log"
 
 	"github.com/ergochat/irc-go/ircmsg"
 
@@ -12,7 +12,7 @@ import (
 )
 
 func handleDisconnect(b *core.Bouncer, ds *core.DownstreamConnection, msg ircmsg.Message) error {
-	log.Printf("[downstream %s] Client requested upstream disconnect!", ds.Conn.RemoteAddr())
+	log.Debug().Msgf("[downstream %s] Client requested upstream disconnect!", ds.Conn.RemoteAddr())
 	upstream := b.GetUpstreamConn()
 
 	// We can't connect to an already connected server

@@ -3,7 +3,7 @@
 package downstreambot
 
 import (
-	"log"
+	"github.com/rs/zerolog/log"
 
 	"github.com/ergochat/irc-go/ircmsg"
 
@@ -16,19 +16,19 @@ func HandlePRIVMSG(b *core.Bouncer, ds *core.DownstreamConnection, msg ircmsg.Me
 	case "isConnected":
 		err := handleIsConnected(b, ds, msg)
 		if err != nil {
-			log.Printf("[downstream %s] Error sending *status response: %v", ds.Conn.RemoteAddr(), err)
+			log.Debug().Msgf("[downstream %s] Error sending *status response: %v", ds.Conn.RemoteAddr(), err)
 		}
 
 	case "connect":
 		err := handleConnect(b, ds, msg)
 		if err != nil {
-			log.Printf("[downstream %s] Error sending *status response: %v", ds.Conn.RemoteAddr(), err)
+			log.Debug().Msgf("[downstream %s] Error sending *status response: %v", ds.Conn.RemoteAddr(), err)
 		}
 
 	case "disconnect":
 		err := handleDisconnect(b, ds, msg)
 		if err != nil {
-			log.Printf("[downstream %s] Error sending *status response: %v", ds.Conn.RemoteAddr(), err)
+			log.Debug().Msgf("[downstream %s] Error sending *status response: %v", ds.Conn.RemoteAddr(), err)
 		}
 	}
 

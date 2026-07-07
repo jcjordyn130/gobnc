@@ -1,7 +1,7 @@
 package upstreamHandlers
 
 import (
-	"log"
+	"github.com/rs/zerolog/log"
 
 	"github.com/ergochat/irc-go/ircmsg"
 )
@@ -9,14 +9,14 @@ import (
 func Handle332(b Router, msg ircmsg.Message) error {
 	// Sanity check
 	if len(msg.Params) < 2 {
-		log.Printf("[upstream %s] Ignoring RPL 332 due to invalid paramaters", b.GetUpstreamConn().Server)
+		log.Debug().Msgf("[upstream %s] Ignoring RPL 332 due to invalid paramaters", b.GetUpstreamConn().Server)
 		return nil
 	}
 
 	channel := msg.Params[1]
 	topic := msg.Params[2]
 
-	log.Printf("[upstream %s] Setting topic for channel %s to: %s", b.GetUpstreamConn().Server, channel, topic)
+	log.Debug().Msgf("[upstream %s] Setting topic for channel %s to: %s", b.GetUpstreamConn().Server, channel, topic)
 
 	b.SetChannelTopic(channel, topic)
 

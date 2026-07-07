@@ -9,7 +9,7 @@ password = "" # /PASS password not NickServ or SASL
 nick = "nicknamehere"
 
 # Core bouncer configuration
-verbose = false
+verbose_upstream = false
 dbpath = "test.db"
 bind_address = "127.0.0.1:12345"
 

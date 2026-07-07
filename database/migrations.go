@@ -28,4 +28,14 @@ var registeredMigrations = []Migration{
 			ALTER TABLE history ADD COLUMN command TEXT DEFAULT 'PRIVMSG';
 		`,
 	},
+	{
+		Version: 3,
+		Name:    "add_autojoin_table",
+		UpSQL: `
+			CREATE TABLE IF NOT EXISTS autojoin (
+				channel TEXT PRIMARY KEY,
+				UNIQUE(channel)
+			);
+			`,
+	},
 }

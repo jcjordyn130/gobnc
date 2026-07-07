@@ -4,7 +4,8 @@ package core
 
 import (
 	"bouncer/upstreamHandlers"
-	"log"
+
+	"github.com/rs/zerolog/log"
 
 	"github.com/ergochat/irc-go/ircevent"
 )
@@ -34,11 +35,24 @@ func (b *Bouncer) ConnectToServer(conn *ircevent.Connection) (err error) {
 	upstreamHandlers.Register(b, "372", upstreamHandlers.Handle372) // MOTD line
 	upstreamHandlers.Register(b, "376", upstreamHandlers.Handle376) // MOTD End
 	upstreamHandlers.Register(b, "PART", upstreamHandlers.HandlePART)
+	upstreamHandlers.Register(b, "001", upstreamHandlers.Handle001) // RPL_WELCOME
+	upstreamHandlers.Register(b, "477", upstreamHandlers.Handle477) // Cannot join channel (unregistered)
+	upstreamHandlers.Register(b, "900", upstreamHandlers.Handle900) // RPL_LOGGEDIN
+	upstreamHandlers.Register(b, "302", upstreamHandlers.Handle302) // RPL_USERHOST
+
+	// WHOIS related handlers
+	upstreamHandlers.Register(b, "311", upstreamHandlers.Handle311)
+	upstreamHandlers.Register(b, "319", upstreamHandlers.Handle319)
+	upstreamHandlers.Register(b, "312", upstreamHandlers.Handle312)
+	upstreamHandlers.Register(b, "671", upstreamHandlers.Handle671)
+	upstreamHandlers.Register(b, "338", upstreamHandlers.Handle338)
+	upstreamHandlers.Register(b, "317", upstreamHandlers.Handle317)
+	upstreamHandlers.Register(b, "318", upstreamHandlers.Handle318)
 
 	// Connect to the upstream server
 	err = conn.Connect()
 	if err != nil {
-		log.Println("Upstream connection failure:", err)
+		log.Debug().Msgf("Upstream connection failure: %v", err)
 		return err
 	}
 

@@ -1,6 +1,6 @@
 package events
 
-import "log"
+import "github.com/rs/zerolog/log"
 
 // Start is called when the network is initialized
 func (s *NetworkSession) Start() {
@@ -13,7 +13,7 @@ func (s *NetworkSession) Start() {
 
 func (s *NetworkSession) eventLoop() {
 	for event := range s.events {
-		log.Printf("[eventLoop] got event %s with channel %s", event.Type, event.Channel)
+		log.Debug().Msgf("[eventLoop] got event %s with channel %s", event.Type, event.Channel)
 
 		switch event.Type {
 		case "CHANNEL_SYNCED":

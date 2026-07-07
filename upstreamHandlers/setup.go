@@ -1,16 +1,14 @@
 package upstreamHandlers
 
 import (
-	"log"
-
 	"github.com/ergochat/irc-go/ircevent"
 	"github.com/ergochat/irc-go/ircmsg"
+	"github.com/rs/zerolog/log"
 )
 
 // Router defines the abilities the upstream handlers need
 // from the core Bouncer to do their job.
 type Router interface {
-	//SendToClient(conn net.Conn, message ircmsg.Message)
 	GetUpstreamConn() *ircevent.Connection
 	BroadcastToClients(msg ircmsg.Message)
 	LogToDB(msg ircmsg.Message)
@@ -26,6 +24,7 @@ type Router interface {
 	OnUpstreamJoin(channelName string)
 	ClearMOTD()
 	CacheMOTD(msg ircmsg.Message)
+	JoinAutoJoinChannels() error
 }
 
 type UpstreamCommandHandler func(b Router, msg ircmsg.Message) error
@@ -36,7 +35,7 @@ func Register(b Router, cmd string, callback UpstreamCommandHandler) {
 	upstream := b.GetUpstreamConn()
 
 	upstream.AddCallback(cmd, func(e ircmsg.Message) {
-		log.Printf("[upstream %s] Routing to command handler for: %s", upstream.Server, cmd)
+		log.Debug().Msgf("[upstream %s] Routing to command handler for: %s", upstream.Server, cmd)
 		callback(b, e)
 	})
 }

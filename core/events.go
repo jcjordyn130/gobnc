@@ -1,9 +1,9 @@
 package core
 
-import "log"
+import "github.com/rs/zerolog/log"
 
 func (b *Bouncer) OnUpstreamJoin(channelName string) {
-	log.Printf("[bouncer] Running OpUpstreamJoin handler for %s", channelName)
+	log.Debug().Msgf("[bouncer] Running OpUpstreamJoin handler for %s", channelName)
 	for _, client := range b.GetDownstreamConns() {
 		go b.SendHistory(&channelName, client)
 	}

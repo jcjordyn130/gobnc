@@ -25,7 +25,7 @@ func DisConHandleUSERHOST(b *core.Bouncer, ds *core.DownstreamConnection, msg ir
 		// BNC users are IRC operators when not connected
 
 		// Construct the segment (e.g., "Trifton*=+user@host.com")
-		segment := reqNick + "*=+" + "GhOsT" + "@" + "bnc.jordynsblog.org"
+		segment := reqNick + "*=+" + "GhOsT" + "@" + b.ServerName
 		replies = append(replies, segment)
 	}
 
@@ -34,11 +34,11 @@ func DisConHandleUSERHOST(b *core.Bouncer, ds *core.DownstreamConnection, msg ir
 
 	// 4. Synthesize the 302 numeric
 	msg = ircmsg.MakeMessage(
-		nil,                   // Tags (nil for standard numerics)
-		"bnc.jordynsblog.org", // Prefix (The bouncer claiming to be the server)
-		"302",                 // RPL_USERHOST command
-		ds.Nick,               // [0] The client receiving the response
-		trailingParam,         // [1] The packed string of results
+		nil,           // Tags (nil for standard numerics)
+		b.ServerName,  // Prefix (The bouncer claiming to be the server)
+		"302",         // RPL_USERHOST command
+		ds.Nick,       // [0] The client receiving the response
+		trailingParam, // [1] The packed string of results
 	)
 
 	// 5. Serialize to raw bytes and send down the socket
@@ -63,7 +63,7 @@ func HandleUSERHOST(b *core.Bouncer, ds *core.DownstreamConnection, msg ircmsg.M
 	if !upstream.Connected() {
 		return DisConHandleUSERHOST(b, ds, msg)
 	} else {
-		// TODO: implement
-		return nil
+		// Maybe this needs an upstream handler, but for now just echo to upstream
+		return b.GetUpstreamConn().SendIRCMessage(msg)
 	}
 }

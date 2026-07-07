@@ -1,6 +1,6 @@
 package core
 
-import "log"
+import "github.com/rs/zerolog/log"
 
 // Helper to separate prefixes from nicknames
 func parsePrefix(rawNick string) (nick string, prefix string) {
@@ -30,7 +30,7 @@ func modeToPrefix(mode rune) string {
 	case 'q':
 		return "~" // Founder
 	default:
-		log.Printf("Invalid rune %s receieved for modeToPrefix", mode)
+		log.Debug().Msgf("Invalid rune %s receieved for modeToPrefix", mode)
 		return ""
 	}
 }

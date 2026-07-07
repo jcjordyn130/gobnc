@@ -1,9 +1,9 @@
 package config
 
 import (
-	"log"
 	"strings"
 
+	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 )
 
@@ -16,7 +16,7 @@ type Config struct {
 	Nick             string `mapstructure:"nick"`
 	Password         string `mapstructure:"password"`
 	BindAddress      string `mapstructure:"bind_address"`
-	Verbose          bool   `mapstructure:"verbose"`
+	VerboseUpstream  bool   `mapstructure:"verbose_upstream"`
 	DBPath           string `mapstructure:"dbpath"`
 	MaxQLen          int    `mapstructure:"maxqlen"`
 }
@@ -43,7 +43,7 @@ func LoadConfig() (*Config, error) {
 	// 3. Set Defaults
 	v.SetDefault("upstream_port", 6697)
 	v.SetDefault("bind_address", "127.0.0.1:12345")
-	v.SetDefault("verbose", true)
+	v.SetDefault("verbose_upstream", false)
 	v.SetDefault("MaxQLen", 5000)
 
 	// 4. Read the file
@@ -51,7 +51,7 @@ func LoadConfig() (*Config, error) {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
 			return nil, err // Config file found but had an error
 		}
-		log.Println("No config file found, using defaults and environment variables")
+		log.Debug().Msg("No config file found, using defaults and environment variables")
 	}
 
 	// 5. Unmarshal into struct

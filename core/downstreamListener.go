@@ -7,31 +7,31 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net"
 
 	"github.com/ergochat/irc-go/ircmsg"
 	"github.com/ergochat/irc-go/ircreader"
+	"github.com/rs/zerolog/log"
 )
 
 func (b *Bouncer) ListenDownstream(bindAddress string) {
-	log.Printf("Starting downstream accept loop for bindAddress %s", bindAddress)
+	log.Debug().Msgf("Starting downstream accept loop for bindAddress %s", bindAddress)
 	listener, err := net.Listen("tcp", bindAddress)
 	if err != nil {
-		log.Fatalf("Failed to bind downstream port: %v", err)
+		log.Fatal().Msgf("Failed to bind downstream port: %v", err)
 	}
 
-	log.Printf("Downstream listening on %s", bindAddress)
+	log.Debug().Msgf("Downstream listening on %s", bindAddress)
 
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			log.Println("Downstream accept error:", err)
+			log.Debug().Msgf("Downstream accept error: %v", err)
 			continue
 		}
 
-		log.Printf("[downstream %s] Client connected", conn.RemoteAddr())
-		log.Printf("Client attached to bouncer %s", conn.RemoteAddr())
+		log.Debug().Msgf("[downstream %s] Client connected", conn.RemoteAddr())
+		log.Debug().Msgf("Client attached to bouncer %s", conn.RemoteAddr())
 		// Add context state
 		ctx, cancel := context.WithCancel(context.Background())
 
@@ -51,7 +51,7 @@ func (b *Bouncer) ListenDownstream(bindAddress string) {
 
 func (b *Bouncer) handleClient(ds *DownstreamConnection) {
 	// Close connection at the end of the function
-	defer log.Printf("[downstream %s] Client disconnected", ds.Conn.RemoteAddr())
+	defer log.Debug().Msgf("[downstream %s] Client disconnected", ds.Conn.RemoteAddr())
 	defer b.DisconnectDownstreamConnection(ds, "Graceful")
 
 	// Setup a new reader for the downstream connection
@@ -71,7 +71,7 @@ func (b *Bouncer) handleClient(ds *DownstreamConnection) {
 		rawmsg := ircmsg.MakeMessage(nil, fakeHostName, "NOTICE", "Disconnected from IRC!")
 		msg, err := rawmsg.LineBytes()
 		if err != nil {
-			log.Printf("[downstream %s] Error sending disconnected-to-upstream message: %v", ds.Conn.RemoteAddr(), err)
+			log.Debug().Msgf("[downstream %s] Error sending disconnected-to-upstream message: %v", ds.Conn.RemoteAddr(), err)
 		}
 		ds.Conn.Write(msg)
 	}
@@ -83,13 +83,13 @@ func (b *Bouncer) handleClient(ds *DownstreamConnection) {
 		if err != nil {
 			// Handle graceful EOF
 			if err == io.EOF {
-				log.Printf("[downstream %s] Exiting connection loop due to EOF", ds.Conn.RemoteAddr())
+				log.Debug().Msgf("[downstream %s] Exiting connection loop due to EOF", ds.Conn.RemoteAddr())
 				return
 			}
 
 			// Handle buffer overflow without a line terminator
 			if err == ircreader.ErrReadQ {
-				log.Printf("[downstream %s] Forcing client to quit due to exceeding ReadQ", ds.Conn.RemoteAddr())
+				log.Debug().Msgf("[downstream %s] Forcing client to quit due to exceeding ReadQ", ds.Conn.RemoteAddr())
 				b.DisconnectDownstreamConnection(ds, "Max ReadQ Exceeded")
 				return
 			}
@@ -98,16 +98,16 @@ func (b *Bouncer) handleClient(ds *DownstreamConnection) {
 			if netErr, ok := errors.AsType[net.Error](err); ok {
 				// We're going down
 				if errors.Is(netErr, net.ErrClosed) {
-					log.Printf("[downstream %s] Exiting connection loop cleanly", ds.Conn.RemoteAddr())
+					log.Debug().Msgf("[downstream %s] Exiting connection loop cleanly", ds.Conn.RemoteAddr())
 					return
 				}
 
-				log.Printf("[downstream %s] Exiting connection loop due to network error: %v", ds.Conn.RemoteAddr(), netErr)
+				log.Debug().Msgf("[downstream %s] Exiting connection loop due to network error: %v", ds.Conn.RemoteAddr(), netErr)
 				return
 			}
 
 			// Handle generic errors
-			log.Printf("[downstream %s] Error reading line: %v", ds.Conn.RemoteAddr(), err)
+			log.Debug().Msgf("[downstream %s] Error reading line: %v", ds.Conn.RemoteAddr(), err)
 		}
 
 		// Format line to an ircMessage and debug print
@@ -115,21 +115,21 @@ func (b *Bouncer) handleClient(ds *DownstreamConnection) {
 		//log.Printf("[downstream %s] %s", conn.RemoteAddr(), line)
 		msg, err := ircmsg.ParseLine(line)
 		if err != nil {
-			log.Printf("[downstream %s] Error parsing line", ds.Conn.RemoteAddr())
+			log.Debug().Msgf("[downstream %s] Error parsing line", ds.Conn.RemoteAddr())
 			return
 		}
-		log.Printf("[downstream %s] %+v", ds.Conn.RemoteAddr(), msg)
+		log.Debug().Msgf("[downstream %s] %+v", ds.Conn.RemoteAddr(), msg)
 
 		// Call command handler
 		err = b.Route(ds, msg)
 		if HNFErr, ok := errors.AsType[*HandlerNotFound](err); ok && b.upstreamConn.Connected() {
-			log.Printf("[downstream %s] Passing line to upstream: %v", ds.Conn.RemoteAddr(), HNFErr)
+			log.Debug().Msgf("[downstream %s] Passing line to upstream: %v", ds.Conn.RemoteAddr(), HNFErr)
 			b.upstreamConn.Send(string(rawLine))
 		} else if _, ok := errors.AsType[*DownstreamClientQuitting](err); ok {
-			log.Printf("[downstream %s] Connection loop quitting due to clean break", ds.Conn.RemoteAddr())
+			log.Debug().Msgf("[downstream %s] Connection loop quitting due to clean break", ds.Conn.RemoteAddr())
 			break
 		} else if err != nil {
-			log.Printf("[downstream %s] Error calling command handler: %v", ds.Conn.RemoteAddr(), err)
+			log.Debug().Msgf("[downstream %s] Error calling command handler: %v", ds.Conn.RemoteAddr(), err)
 		}
 	}
 }

@@ -4,10 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/ergochat/irc-go/ircmsg"
+	"github.com/rs/zerolog/log"
 	_ "modernc.org/sqlite"
 )
 
@@ -36,7 +36,7 @@ func NewDB(file string, maxQLen int) (*DB, error) {
 		return nil, fmt.Errorf("database file path is empty")
 	}
 
-	log.Printf("[database] Using %d for max queued messages", maxQLen)
+	log.Debug().Msgf("[database] Using %d for max queued messages", maxQLen)
 	db.LogQueue = make(chan ircmsg.Message, maxQLen)
 
 	// Open DB and init tables
@@ -53,7 +53,7 @@ func NewDB(file string, maxQLen int) (*DB, error) {
 
 func (db *DB) Init(file string) error {
 	// Open DB connection
-	log.Printf("[database] Using file %s", file)
+	log.Debug().Msgf("[database] Using file %s", file)
 	conn, err := sql.Open("sqlite", file)
 	if err != nil {
 		panic(err)
@@ -70,22 +70,97 @@ func (db *DB) Init(file string) error {
 
 	// Enable WAL for increased performance
 	if _, err := conn.Exec("PRAGMA journal_mode=WAL;"); err != nil {
-		log.Printf("[database] Error enabling WAL mode for DB: %v", &err)
+		log.Debug().Msgf("[database] Error enabling WAL mode for DB: %v", &err)
 	}
 
 	// WAL means we don't need hard syncing for the database
 	if _, err := conn.Exec("PRAGMA synchronous = NORMAL;"); err != nil {
-		log.Printf("[database] Error enabling NORMAL sync mode for DB: %v", &err)
+		log.Debug().Msgf("[database] Error enabling NORMAL sync mode for DB: %v", &err)
 	}
 
 	// Init DB schema
-	log.Printf("[database] Creating schema")
+	log.Debug().Msg("[database] Creating schema")
 	err = db.runMigrations()
 	if err != nil {
 		panic(err)
 	}
 
 	return nil
+}
+
+func (db *DB) AddAutoJoinChan(channel string) error {
+	// Basic sanity checking
+	if channel == "" {
+		return fmt.Errorf("channel name cannot be empty")
+	}
+	// The query returns 1 if found, 0 if not
+	query := "SELECT EXISTS(SELECT * FROM autojoin WHERE channel = ?)"
+
+	var exists bool
+	err := db.conn.QueryRow(query, channel).Scan(&exists)
+	if err != nil {
+		return fmt.Errorf("error checking autojoin channel: %w", err)
+	}
+
+	if !exists {
+		log.Debug().Msgf("[database] Adding autojoin channel: %s", channel)
+		_, err := db.conn.Exec("INSERT INTO autojoin (channel) VALUES (?)", channel)
+		if err != nil {
+			return fmt.Errorf("error adding autojoin channel: %w", err)
+		}
+	} else {
+		return fmt.Errorf("channel %s already exists in autojoin list", channel)
+	}
+
+	return nil
+}
+
+func (db *DB) RemoveAutoJoinChan(channel string) error {
+	// Basic sanity checking
+	if channel == "" {
+		return fmt.Errorf("channel name cannot be empty")
+	}
+
+	log.Debug().Msgf("[database] Removing autojoin channel: %s", channel)
+	result, err := db.conn.Exec("DELETE FROM autojoin WHERE channel = ?", channel)
+	if err != nil {
+		return fmt.Errorf("error removing autojoin channel: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("error checking rows affected when removing autojoin channel: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("channel %s not found in autojoin list", channel)
+	}
+
+	return nil
+}
+
+func (db *DB) GetAutoJoinChans() ([]string, error) {
+	log.Debug().Msg("[database] Retrieving autojoin channels")
+	query := "SELECT channel FROM autojoin"
+	rows, err := db.conn.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("error querying autojoin channels: %w", err)
+	}
+	defer rows.Close()
+
+	var channels []string
+	for rows.Next() {
+		var channel string
+		if err := rows.Scan(&channel); err != nil {
+			return nil, fmt.Errorf("error scanning autojoin channel: %w", err)
+		}
+		channels = append(channels, channel)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating autojoin channels: %w", err)
+	}
+	return channels, nil
 }
 
 // We return a read-only channel (<-chan) for messages, and an error channel.
@@ -117,7 +192,7 @@ func (db *DB) AsyncGetMessages(ctx context.Context, limit int) (<-chan ChatMessa
 		for rows.Next() {
 			var msg ChatMessage
 			if err := rows.Scan(&msg.id, &msg.Source, &msg.Target, &msg.Content, &msg.Timestamp); err != nil {
-				log.Printf("[database] Error scanning row: %v", err)
+				log.Debug().Msgf("[database] Error scanning row: %v", err)
 				continue
 			}
 
@@ -172,7 +247,7 @@ func (db *DB) GetMessages(source string, limit int) ([]ChatMessage, error) {
 		var msg ChatMessage
 		// Scan copies the columns from the current row into the variables provided.
 		if err := rows.Scan(&msg.id, &msg.Source, &msg.Target, &msg.Content, &msg.Timestamp); err != nil {
-			log.Printf("Error scanning row: %v\n", err)
+			log.Debug().Msgf("[database] Error scanning row: %v", err)
 			continue // Skip bad rows rather than crashing
 		}
 		msgs = append(msgs, msg)
@@ -193,20 +268,20 @@ func (db *DB) DatabaseWriter() {
 		// Wait for at least one message to arrive
 		msg, ok := <-db.LogQueue
 		if !ok {
-			log.Printf("[database] Writer quitting due to closed channel")
+			log.Debug().Msg("[database] Writer quitting due to closed channel")
 			return // Channel closed, exit goroutine
 		}
 
 		// Start a transaction
 		tx, err := db.conn.Begin()
 		if err != nil {
-			log.Printf("[database] Error starting transaction: %v", err)
+			log.Debug().Msgf("[database] Error starting transaction: %v", err)
 			continue
 		}
 
 		stmt, err := tx.Prepare("INSERT INTO history (source, target, content, timestamp, command) VALUES (?, ?, ?, ?, ?)")
 		if err != nil {
-			log.Printf("[database] Error preparing statement: %v", err)
+			log.Debug().Msgf("[database] Error preparing statement: %v", err)
 			tx.Rollback()
 			continue
 		}
@@ -243,7 +318,7 @@ func (db *DB) DatabaseWriter() {
 		stmt.Close()
 		err = tx.Commit()
 		if err != nil {
-			log.Printf("[database] Error committing batch: %v", err)
+			log.Debug().Msgf("[database] Error committing batch: %v", err)
 		}
 	}
 }
@@ -267,12 +342,12 @@ func (db *DB) runMigrations() error {
 		currentVersion = 0
 	}
 
-	log.Printf("[database] Current schema version: %d", currentVersion)
+	log.Debug().Msgf("[database] Current schema version: %d", currentVersion)
 
 	// 3. Iterate through registered migrations
 	for _, migration := range registeredMigrations {
 		if migration.Version > currentVersion {
-			log.Printf("[database] Applying migration %d: %s", migration.Version, migration.Name)
+			log.Debug().Msgf("[database] Applying migration %d: %s", migration.Version, migration.Name)
 
 			// Start a transaction for this specific migration
 			tx, err := db.conn.Begin()
@@ -297,7 +372,7 @@ func (db *DB) runMigrations() error {
 				return fmt.Errorf("failed to commit migration %d: %w", migration.Version, err)
 			}
 
-			log.Printf("[database] Successfully applied migration %d", migration.Version)
+			log.Debug().Msgf("[database] Successfully applied migration %d", migration.Version)
 		}
 	}
 

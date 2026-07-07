@@ -6,12 +6,12 @@ package core
 import (
 	"bouncer/database"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
 	"github.com/ergochat/irc-go/ircevent"
 	"github.com/ergochat/irc-go/ircmsg"
+	"github.com/rs/zerolog/log"
 )
 
 // List of IRCv3 capabilities that we support
@@ -31,7 +31,7 @@ func NewBouncer(upstream *ircevent.Connection) *Bouncer {
 
 func (b *Bouncer) GetUpstreamConn() *ircevent.Connection {
 	if b.upstreamConn == nil {
-		log.Println("Returning NULL upstreamConn!")
+		log.Debug().Msg("Returning NULL upstreamConn!")
 	}
 
 	return b.upstreamConn
@@ -73,10 +73,12 @@ func (b *Bouncer) Register(command string, handler DownstreamCommandHandler) {
 
 // Handle callbacks
 func (b *Bouncer) Route(ds *DownstreamConnection, msg ircmsg.Message) error {
-	log.Printf("[downstream %s] Routing to command handler for: %s", ds.Conn.RemoteAddr(), msg.Command)
+	log.Debug().Msgf("[downstream %s] Routing to command handler for: %s", ds.Conn.RemoteAddr(), msg.Command)
 	if handler, exists := b.routes[msg.Command]; exists {
 		// Pass the bouncer instance into the handler
-		return handler(b, ds, msg)
+		// TODO: pass errors?
+		go handler(b, ds, msg)
+		return nil
 	} else {
 		return &HandlerNotFound{msg.Command}
 	}
@@ -85,13 +87,13 @@ func (b *Bouncer) Route(ds *DownstreamConnection, msg ircmsg.Message) error {
 func (b *Bouncer) SendToClient(ds *DownstreamConnection, ircmsg ircmsg.Message) error {
 	ircmsgb, err := ircmsg.LineBytes()
 	if err != nil {
-		log.Printf("[downstream %s] Error sending response: %v", ds.Conn.RemoteAddr(), err)
+		log.Debug().Msgf("[downstream %s] Error sending response: %v", ds.Conn.RemoteAddr(), err)
 		return err
 	}
 
 	_, err = ds.Conn.Write(ircmsgb)
 	if err != nil {
-		log.Printf("[downstream %s] Error sending response: %v", ds.Conn.RemoteAddr(), err)
+		log.Debug().Msgf("[downstream %s] Error sending response: %v", ds.Conn.RemoteAddr(), err)
 		return err
 	}
 
@@ -103,14 +105,14 @@ func (b *Bouncer) SendHistory(channel *string, ds *DownstreamConnection) {
 	var errChan <-chan error
 
 	if channel != nil {
-		log.Printf("[downstream %s] Sending backlog for %s", ds.Conn.RemoteAddr(), *channel)
+		log.Debug().Msgf("[downstream %s] Sending backlog for %s", ds.Conn.RemoteAddr(), *channel)
 		multiFilter := map[string]string{
 			"target": *channel,
 		}
 
 		msgChan, errChan = b.DB.AsyncSearchMessages(ds.Ctx, multiFilter, 999999)
 	} else {
-		log.Printf("[downstream %s] Sending backlog with no filter!!!", ds.Conn.RemoteAddr())
+		log.Debug().Msgf("[downstream %s] Sending backlog with no filter!!!", ds.Conn.RemoteAddr())
 		msgChan, errChan = b.DB.AsyncGetMessages(ds.Ctx, 99999999)
 	}
 
@@ -128,28 +130,35 @@ func (b *Bouncer) SendHistory(channel *string, ds *DownstreamConnection) {
 		// which will fire ds.Cancel() and kill the DB query.
 		err := b.SendToClient(ds, formsg)
 		if err != nil {
-			log.Printf("[downstream %s] Write failed during history, disconnecting", ds.Conn.RemoteAddr())
+			log.Debug().Msgf("[downstream %s] Write failed during history, disconnecting", ds.Conn.RemoteAddr())
 			b.DisconnectDownstreamConnection(ds, "broken client")
 			return // Exit the loop
 		}
 	}
 
 	if err := <-errChan; err != nil {
-		log.Printf("[downstream %s] History stream ended: %v", ds.Conn.RemoteAddr(), err)
+		log.Debug().Msgf("[downstream %s] History stream ended: %v", ds.Conn.RemoteAddr(), err)
 	}
 }
 
 func (b *Bouncer) BroadcastToClients(msg ircmsg.Message) {
+	if len(b.DownstreamConnections) == 0 {
+		log.Debug().Msgf("[bouncer] No downstream clients to broadcast to!")
+		return
+	}
+
+	log.Debug().Msgf("[bouncer] Broadcasting message to %d clients", len(b.DownstreamConnections))
+
 	// Copy connections as net.Conn.Write can block
-	log.Printf("[bouncer] Locking DownstreamConnections and grabbing clients!")
+	log.Debug().Msgf("[bouncer] Locking DownstreamConnections and grabbing clients!")
 	b.ds_mu.RLock()
 	activeClients := make([]*DownstreamConnection, len(b.DownstreamConnections))
 	copy(activeClients, b.DownstreamConnections)
 	b.ds_mu.RUnlock()
 
 	for _, ds := range activeClients {
-		log.Printf("[downstream %s] Forwarding message to active client!", ds.Conn.RemoteAddr())
-		b.SendToClient(ds, msg)
+		log.Debug().Msgf("[downstream %s] Forwarding message to active client!", ds.Conn.RemoteAddr())
+		go b.SendToClient(ds, msg)
 	}
 }
 
@@ -160,7 +169,7 @@ func (b *Bouncer) LogToDB(msg ircmsg.Message) {
 
 func (b *Bouncer) ChangeDownstreamNick(newnick string) {
 	for _, ds := range b.DownstreamConnections {
-		log.Printf("Changing nick from %s to %s", ds.Nick, newnick)
+		log.Debug().Msgf("Changing nick from %s to %s", ds.Nick, newnick)
 
 		// Create NICK command
 		nickmsg := ircmsg.MakeMessage(nil, ds.Nick, "NICK", newnick)
@@ -222,7 +231,7 @@ func (b *Bouncer) DeleteChannel(channel string) {
 
 	// Hoeh?
 	if !exists {
-		log.Printf("DeleteChannel ran with non-existent channel!")
+		log.Debug().Msgf("DeleteChannel ran with non-existent channel!")
 		return
 	}
 
@@ -305,7 +314,7 @@ func (b *Bouncer) DisconnectDownstreamConnection(ds *DownstreamConnection, reaso
 
 	// Intentionally ignoring error here
 	_ = b.SendToClient(ds, msg)
-	log.Printf("[downstream %s] Sending ERROR to breaking client", ds.Conn.RemoteAddr())
+	log.Debug().Msgf("[downstream %s] Sending ERROR to breaking client", ds.Conn.RemoteAddr())
 
 	// Cancel context
 	if ds.Cancel != nil {
@@ -319,7 +328,7 @@ func (b *Bouncer) DisconnectDownstreamConnection(ds *DownstreamConnection, reaso
 		_ = ds.Conn.Close()
 	}
 
-	log.Printf("[downstream %s] Removing DownstreamConnection", ds.Conn.RemoteAddr())
+	log.Debug().Msgf("[downstream %s] Removing DownstreamConnection", ds.Conn.RemoteAddr())
 
 	// Start touching the array
 	b.ds_mu.Lock()
@@ -336,7 +345,7 @@ func (b *Bouncer) DisconnectDownstreamConnection(ds *DownstreamConnection, reaso
 
 	// It wasn't found???
 	if targetIndex == -1 {
-		log.Printf("[downstream %s] RemoveDownstreamConnection called with invalid connection", ds.Conn.RemoteAddr())
+		log.Debug().Msgf("[downstream %s] RemoveDownstreamConnection called with invalid connection", ds.Conn.RemoteAddr())
 		return
 	}
 
@@ -393,7 +402,7 @@ func (b *Bouncer) ApplyModes(channel string, modeStr string, args []string) {
 
 			ch.Users[targetNick] = curPrefix
 
-			log.Printf("[State] Channel %s | User %s | New Mode: %s", channel, targetNick, curPrefix)
+			log.Debug().Msgf("[State] Channel %s | User %s | New Mode: %s", channel, targetNick, curPrefix)
 
 		default:
 			// Other channel modes like +k (password), +l (limit), +t (topic lock).
@@ -427,13 +436,13 @@ func (b *Bouncer) EchoToOtherClients(sender *DownstreamConnection, msg ircmsg.Me
 
 	// Add ourselves if we have echo-message support
 	if sender.Caps["echo-message"] {
-		log.Printf("[downstream %s] Including ourselves in self-echo due to echo-message cap", sender.Conn.RemoteAddr())
+		log.Debug().Msgf("[downstream %s] Including ourselves in self-echo due to echo-message cap", sender.Conn.RemoteAddr())
 		activeClients = append(activeClients, sender)
 	}
 
 	// 4. Send the echo to all other devices
 	for _, ds := range activeClients {
-		log.Printf("[downstream %s] Echoing message to %s", sender.Conn.RemoteAddr(), ds.Conn.RemoteAddr())
+		log.Debug().Msgf("[downstream %s] Echoing message to %s", sender.Conn.RemoteAddr(), ds.Conn.RemoteAddr())
 
 		// We have to rebuild the message as normal outgoing PRIVMSGs do not have a hostmask
 		echoMsg := ircmsg.MakeMessage(nil, prefix, msg.Command, msg.Params...)
@@ -446,9 +455,26 @@ func (b *Bouncer) EchoToOtherClients(sender *DownstreamConnection, msg ircmsg.Me
 }
 
 func (b *Bouncer) AddDownstreamConnection(ds *DownstreamConnection) {
-	log.Printf("[downstream %s] Adding DownstreamConnection to list!", ds.Conn.RemoteAddr())
+	log.Debug().Msgf("[downstream %s] Adding DownstreamConnection to list!", ds.Conn.RemoteAddr())
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	b.DownstreamConnections = append(b.DownstreamConnections, ds)
+}
+
+func (b *Bouncer) JoinAutoJoinChannels() error {
+	autojoinChannels, err := b.DB.GetAutoJoinChans()
+	if err != nil {
+		return fmt.Errorf("error retrieving autojoin channels: %w", err)
+	}
+
+	for _, channel := range autojoinChannels {
+		log.Debug().Msgf("[upstream %s] Joining autojoin channel: %s", b.GetUpstreamConn().Server, channel)
+		err := b.GetUpstreamConn().Join(channel)
+		if err != nil {
+			log.Debug().Msgf("[upstream %s] Error joining autojoin channel %s: %v", b.GetUpstreamConn().Server, channel, err)
+			return err
+		}
+	}
+	return nil
 }

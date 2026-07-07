@@ -1,8 +1,9 @@
 package upstreamHandlers
 
 import (
-	"log"
 	"strings"
+
+	"github.com/rs/zerolog/log"
 
 	"github.com/ergochat/irc-go/ircmsg"
 )
@@ -10,14 +11,14 @@ import (
 func Handle353(b Router, msg ircmsg.Message) error {
 	// Sanity check
 	if len(msg.Params) < 3 {
-		log.Printf("[upstream %s] Ignoring RPL 353 due to invalid paramaters", b.GetUpstreamConn().Server)
+		log.Debug().Msgf("[upstream %s] Ignoring RPL 353 due to invalid paramaters", b.GetUpstreamConn().Server)
 		return nil
 	}
 
 	channel := msg.Params[2]
 	nameStr := msg.Params[3]
 
-	log.Printf("[upstream %s] Processing NAMES list for %s", b.GetUpstreamConn().Server, channel)
+	log.Debug().Msgf("[upstream %s] Processing NAMES list for %s", b.GetUpstreamConn().Server, channel)
 
 	// Splice the space-separated (per IRC standards) list of names
 	users := strings.Split(strings.TrimSpace(nameStr), " ")
@@ -30,6 +31,7 @@ func Handle353(b Router, msg ircmsg.Message) error {
 }
 
 func Handle366(b Router, msg ircmsg.Message) error {
+	log.Debug().Msgf("[upstream %s] End of NAMES list for %s", b.GetUpstreamConn().Server, msg.Params[1])
 	// Forward message to client
 	b.BroadcastToClients(msg)
 

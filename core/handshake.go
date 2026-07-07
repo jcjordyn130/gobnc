@@ -7,23 +7,23 @@ package core
 
 import (
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
 	"github.com/ergochat/irc-go/ircmsg"
 	"github.com/ergochat/irc-go/ircreader"
+	"github.com/rs/zerolog/log"
 )
 
 func (b *Bouncer) handleHandshake(reader ircreader.Reader, ds *DownstreamConnection) error {
-	log.Printf("[downstream %s] Starting capability negoiation!", ds.Conn.RemoteAddr())
+	log.Debug().Msgf("[downstream %s] Starting capability negoiation!", ds.Conn.RemoteAddr())
 	capNegActive := true
 
 	for {
 		// read raw line from handshake
 		rawLine, err := reader.ReadLine()
 		if err != nil {
-			log.Printf("[downstream %s] handshake error: %v", ds.Conn.RemoteAddr(), err)
+			log.Debug().Msgf("[downstream %s] handshake error: %v", ds.Conn.RemoteAddr(), err)
 			return err
 		}
 
@@ -31,24 +31,24 @@ func (b *Bouncer) handleHandshake(reader ircreader.Reader, ds *DownstreamConnect
 		line := string(rawLine)
 		msg, err := ircmsg.ParseLine(line)
 		if err != nil {
-			log.Printf("[downstream %s] handshake error: %v", ds.Conn.RemoteAddr(), err)
+			log.Debug().Msgf("[downstream %s] handshake error: %v", ds.Conn.RemoteAddr(), err)
 			return err
 		}
 
-		log.Printf("[downstream %s] %+v", ds.Conn.RemoteAddr(), msg)
+		log.Debug().Msgf("[downstream %s] %+v", ds.Conn.RemoteAddr(), msg)
 
 		switch msg.Command {
 		case "CAP":
 			// Check for malformed CAP
 			if len(msg.Params) == 0 {
-				log.Printf("[downstream %s] zero-length CAP received???", ds.Conn.RemoteAddr())
+				log.Debug().Msgf("[downstream %s] zero-length CAP received???", ds.Conn.RemoteAddr())
 				continue
 			}
 
 			subCommand := msg.Params[0]
 
 			if subCommand == "LS" {
-				log.Printf("[downstream %s] client is asking for cap list", ds.Conn.RemoteAddr())
+				log.Debug().Msgf("[downstream %s] client is asking for cap list", ds.Conn.RemoteAddr())
 				capNegActive = true
 
 				// 2. Extract the keys from the map
@@ -63,7 +63,7 @@ func (b *Bouncer) handleHandshake(reader ircreader.Reader, ds *DownstreamConnect
 				lsString := strings.Join(availableCaps, " ")
 
 				capMsg := ircmsg.MakeMessage(nil, b.ServerName, "CAP", "*", "LS", lsString)
-				log.Println(capMsg.Line())
+				log.Debug().Msgf("[downstream %s] Sending CAP LS: %s", ds.Conn.RemoteAddr(), lsString)
 				b.SendToClient(ds, capMsg)
 			} else if subCommand == "REQ" && len(msg.Params) > 1 {
 				requestedCaps := msg.Params[1]
@@ -80,11 +80,11 @@ func (b *Bouncer) handleHandshake(reader ircreader.Reader, ds *DownstreamConnect
 
 					// Check if our bouncer actually supports it
 					if supportedCaps[capName] {
-						log.Printf("[downstream %s] ACKing capability: %s", ds.Conn.RemoteAddr(), capName)
+						log.Debug().Msgf("[downstream %s] ACKing capability: %s", ds.Conn.RemoteAddr(), capName)
 						ds.Caps[capName] = true
 						ackedCaps = append(ackedCaps, capName)
 					} else {
-						log.Printf("[downstream %s] Rejecting unknown capability: %s", ds.Conn.RemoteAddr(), capName)
+						log.Debug().Msgf("[downstream %s] Rejecting unknown capability: %s", ds.Conn.RemoteAddr(), capName)
 						nakedCaps = append(nakedCaps, capName)
 					}
 				}
@@ -104,19 +104,19 @@ func (b *Bouncer) handleHandshake(reader ircreader.Reader, ds *DownstreamConnect
 					b.SendToClient(ds, capMsg)
 				}
 			} else if subCommand == "END" {
-				log.Printf("[downstream %s] cap negotiation end", ds.Conn.RemoteAddr())
+				log.Debug().Msgf("[downstream %s] cap negotiation end", ds.Conn.RemoteAddr())
 				capNegActive = false
 			}
 
 		case "NICK":
 			if len(msg.Params) > 0 {
-				log.Printf("[downstream %s] setting nickname to %s", ds.Conn.RemoteAddr(), msg.Params[0])
+				log.Debug().Msgf("[downstream %s] setting nickname to %s", ds.Conn.RemoteAddr(), msg.Params[0])
 				ds.Nick = msg.Params[0]
 			}
 
 		case "USER":
 			if len(msg.Params) >= 4 {
-				log.Printf("[downstream %s] received USER command", ds.Conn.RemoteAddr())
+				log.Debug().Msgf("[downstream %s] received USER command", ds.Conn.RemoteAddr())
 			}
 		}
 
@@ -138,10 +138,10 @@ func (b *Bouncer) handleHandshake(reader ircreader.Reader, ds *DownstreamConnect
 	// Not *technically* needed but some older clients don't listen to 001
 	// and it makes the handshake code cleaner
 	if b.upstreamConn.Connected() {
-		log.Printf("[downstream %s] Changing nick from client given %s to upstream %s", ds.Conn.RemoteAddr(), ds.Nick, b.upstreamConn.CurrentNick())
+		log.Debug().Msgf("[downstream %s] Changing nick from client given %s to upstream %s", ds.Conn.RemoteAddr(), ds.Nick, b.upstreamConn.CurrentNick())
 		b.ChangeDownstreamNick(b.upstreamConn.CurrentNick())
 	} else {
-		log.Printf("[downstream %s] Not sending upstream nick as we aren't connected!", ds.Conn.RemoteAddr())
+		log.Debug().Msgf("[downstream %s] Not sending upstream nick as we aren't connected!", ds.Conn.RemoteAddr())
 	}
 
 	// Send channel joins
@@ -150,7 +150,7 @@ func (b *Bouncer) handleHandshake(reader ircreader.Reader, ds *DownstreamConnect
 	// Send open queries
 	go b.sendOpenQueries(ds)
 
-	log.Printf("[downstream %s] returning to main client loop", ds.Conn.RemoteAddr())
+	log.Debug().Msgf("[downstream %s] returning to main client loop", ds.Conn.RemoteAddr())
 	return nil
 }
 
@@ -161,7 +161,7 @@ func (b *Bouncer) sendJoinedChannels(ds *DownstreamConnection) {
 	prefix := fmt.Sprintf("%s!GHoSt@%s", ds.Nick, b.ServerName)
 
 	for _, chanState := range b.Channels {
-		log.Printf("[downstream %s] Sending JOIN for %s", ds.Conn.RemoteAddr(), chanState.Name)
+		log.Debug().Msgf("[downstream %s] Sending JOIN for %s", ds.Conn.RemoteAddr(), chanState.Name)
 
 		joinMsg := ircmsg.MakeMessage(nil, prefix, "JOIN", chanState.Name)
 		b.SendToClient(ds, joinMsg)
@@ -190,14 +190,14 @@ func (b *Bouncer) sendJoinedChannels(ds *DownstreamConnection) {
 }
 
 func (b *Bouncer) sendOpenQueries(ds *DownstreamConnection) {
-	log.Printf("[downstream %s] Sending open queries!", ds.Conn.RemoteAddr())
+	log.Debug().Msgf("[downstream %s] Sending open queries!", ds.Conn.RemoteAddr())
 	msgChan, errChan := b.DB.AsyncGetDirectMessages(ds.Ctx, b.upstreamConn.Nick, 99999999)
 
 	recvCount := 0
 
 	for chatMsg := range msgChan {
 		recvCount++
-		log.Printf("[DEBUG-CLIENT] Received message %d from DB channel", recvCount)
+		log.Debug().Msgf("[DEBUG-CLIENT] Received message %d from DB channel", recvCount)
 		// Rewrite historical notices as private messages so clients
 		// like HexChat are forced to open a query window for them.
 		playbackCmd := chatMsg.Command
@@ -215,7 +215,7 @@ func (b *Bouncer) sendOpenQueries(ds *DownstreamConnection) {
 
 		// Send to the downstream client
 		if err := b.SendToClient(ds, forMsg); err != nil {
-			log.Printf("[downstream %s] Write failed during PM history: %v", ds.Conn.RemoteAddr(), err)
+			log.Debug().Msgf("[downstream %s] Write failed during PM history: %v", ds.Conn.RemoteAddr(), err)
 			// If the socket dies, remove the client. This fires ds.Cancel(),
 			// which kills the SQLite query running in the DB worker.
 			//b.DisconnectDownstreamConnection(ds, "Graceful")
@@ -223,19 +223,19 @@ func (b *Bouncer) sendOpenQueries(ds *DownstreamConnection) {
 		}
 	}
 
-	log.Printf("[DEBUG-CLIENT] Message channel closed. Total received: %d. Waiting for error channel...", recvCount)
+	log.Debug().Msgf("[DEBUG-CLIENT] Message channel closed. Total received: %d. Waiting for error channel...", recvCount)
 
 	if err := <-errChan; err != nil {
-		log.Printf("[DEBUG-CLIENT] Stream ended with error: %v", err)
+		log.Debug().Msgf("[DEBUG-CLIENT] Stream ended with error: %v", err)
 	} else {
-		log.Printf("[DEBUG-CLIENT] SUCCESS! Stream ended cleanly with no errors.")
+		log.Debug().Msgf("[DEBUG-CLIENT] SUCCESS! Stream ended cleanly with no errors.")
 	}
 }
 
 func (b *Bouncer) sendNamesList(ds *DownstreamConnection, chState *ChannelState) {
 	// WARN: this function assumes the caller already holds the b.mu lock!
 
-	log.Printf("[downstream %s] Sending /NAMES for %s", ds.Conn.RemoteAddr(), chState.Name)
+	log.Debug().Msgf("[downstream %s] Sending /NAMES for %s", ds.Conn.RemoteAddr(), chState.Name)
 
 	// 3. The Names List (353) - Chunked for Massive Channels
 

@@ -4,8 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"strings"
+
+	"github.com/rs/zerolog/log"
 )
 
 // AsyncStreamQuery is a generic helper that executes a query and streams the results.
@@ -28,7 +29,7 @@ func AsyncStreamQuery[T any](
 		// 1. Execute the query
 		rows, err := db.QueryContext(ctx, query, args...)
 		if err != nil {
-			log.Printf("[DEBUG-DB] Query execution failed: %v", err)
+			log.Debug().Msgf("[DEBUG-DB] Query execution failed: %v", err)
 			errChan <- err
 			return
 		}
@@ -42,7 +43,7 @@ func AsyncStreamQuery[T any](
 			// Delegate the actual scanning to the caller's specific struct
 			item, err := scanner(rows)
 			if err != nil {
-				log.Printf("[database] Error scanning generic row: %v", err)
+				log.Debug().Msgf("[database] Error scanning generic row: %v", err)
 				continue
 			}
 
@@ -50,15 +51,15 @@ func AsyncStreamQuery[T any](
 			select {
 			case msgChan <- item:
 			case <-ctx.Done():
-				log.Printf("[DEBUG-DB] Context cancelled! Aborting stream.")
+				log.Debug().Msgf("[DEBUG-DB] Context cancelled! Aborting stream.")
 				errChan <- ctx.Err()
 				return
 			}
 		}
 
-		log.Printf("[DEBUG-DB] Finished iterating. Total rows processed: %d", rowCount)
+		log.Debug().Msgf("[DEBUG-DB] Finished iterating. Total rows processed: %d", rowCount)
 		if err := rows.Err(); err != nil {
-			log.Printf("[DEBUG-DB] Error during row iteration: %v", err)
+			log.Debug().Msgf("[DEBUG-DB] Error during row iteration: %v", err)
 			errChan <- err
 		}
 	}()

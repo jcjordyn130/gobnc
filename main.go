@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bufio"
+	"context"
 	"crypto/tls"
 	"fmt"
-	"log"
+	"os"
+	"syscall"
 
 	"bouncer/config"
 	"bouncer/core"
@@ -14,9 +17,12 @@ import (
 	_ "net/http/pprof" // The blank identifier is required here to register the handlers
 
 	"github.com/ergochat/irc-go/ircevent"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
+	"github.com/urfave/cli/v3"
 )
 
-func main() {
+func mainConnect() {
 	conf, err := config.LoadConfig()
 	if err != nil {
 		panic(err)
@@ -30,7 +36,7 @@ func main() {
 	}
 
 	if conf.IgnoreCerts {
-		log.Println("[main] Ignoring TLS errors due to config...")
+		log.Debug().Msg("[main] Ignoring TLS errors due to config...")
 		conn.TLSConfig = &tls.Config{InsecureSkipVerify: true}
 	}
 
@@ -59,6 +65,9 @@ func main() {
 	b.Register("QUIT", downstreamHandlers.HandleQUIT)
 	b.Register("PART", downstreamHandlers.HandlePART)
 
+	// Start FIFO handler
+	go listenFIFO(b)
+
 	// Connect to upstream server
 	err = b.ConnectToServer(&conn)
 	if err != nil {
@@ -66,9 +75,134 @@ func main() {
 	}
 
 	// Start upstream server loop
-	log.Println("Starting upstream server loop")
+	log.Debug().Msg("Starting upstream server loop")
 	go conn.Loop()
 
 	// Start downstream listener
 	b.ListenDownstream("127.0.0.1:12345")
+}
+
+func listenFIFO(b *core.Bouncer, fifoName string) {
+	if fifoName == "" {
+		log.Info().Msg("No FIFO name provided, skipping FIFO listener...")
+		return
+	}
+
+	// Create the FIFO file if it doesn't already exist
+	if _, err := os.Stat(fifoName); os.IsNotExist(err) {
+		// 0666 sets read/write permissions for the pipe
+		err := syscall.Mkfifo(fifoName, 0666)
+		if err != nil {
+			log.Fatal().Msgf("Failed to create FIFO: %v", err)
+		}
+	}
+
+	log.Debug().Msgf("Listening for input on %s...", fifoName)
+
+	// Infinite loop: Required to reopen the FIFO when a writer disconnects
+	for {
+		// os.OpenFile blocks here until an external process opens the FIFO for writing
+		file, err := os.OpenFile(fifoName, os.O_RDONLY, os.ModeNamedPipe)
+		if err != nil {
+			log.Debug().Msgf("Error opening FIFO: %v", err)
+			continue
+		}
+
+		// Read lines as they come in
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			line := scanner.Text()
+			log.Debug().Msgf("[FIFO] Received: %s", line)
+
+			// Send the line to the IRC channel
+			b.GetUpstreamConn().SendRaw(line)
+		}
+
+		if err := scanner.Err(); err != nil {
+			log.Debug().Msgf("[FIFO] Error reading from FIFO: %v", err)
+		}
+
+		// The writer closed the pipe (EOF). Close our end, loop around, and block again.
+		file.Close()
+	}
+}
+
+func main() {
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+
+	conf, err := config.LoadConfig()
+	if err != nil {
+		panic(err)
+	}
+
+	// Init database
+	bdb, err := database.NewDB(conf.DBPath, conf.MaxQLen)
+	if err != nil {
+		panic(err)
+	}
+
+	cmd := &cli.Command{
+		Name:  "gobnc",
+		Usage: "IRC bouncer",
+		Commands: []*cli.Command{
+			{
+				Name:  "connect",
+				Usage: "connect to the upstream server and start the bouncer",
+				Action: func(c context.Context, cmd *cli.Command) error {
+					mainConnect()
+					return nil
+				},
+			},
+			{
+				Name:  "config",
+				Usage: "configure the bouncer",
+				Commands: []*cli.Command{
+					{
+						Name:  "addAutoJoin",
+						Usage: "add a channel to the autojoin list",
+						Flags: []cli.Flag{
+							&cli.StringFlag{
+								Name:     "channel",
+								Aliases:  []string{"c"},
+								Usage:    "the channel to add to the autojoin list",
+								Required: true,
+							},
+						},
+						Action: func(c context.Context, cmd *cli.Command) error {
+							err := bdb.AddAutoJoinChan(cmd.String("channel"))
+							if err != nil {
+								return err
+							}
+
+							return nil
+						},
+					},
+					{
+						Name:  "removeAutoJoin",
+						Usage: "remove a channel from the autojoin list",
+						Flags: []cli.Flag{
+							&cli.StringFlag{
+								Name:     "channel",
+								Aliases:  []string{"c"},
+								Usage:    "the channel to remove from the autojoin list",
+								Required: true,
+							},
+						},
+						Action: func(c context.Context, cmd *cli.Command) error {
+							err := bdb.RemoveAutoJoinChan(cmd.String("channel"))
+							if err != nil {
+								return err
+							}
+
+							return nil
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := cmd.Run(context.Background(), os.Args); err != nil {
+		log.Fatal().Msgf("Error running command: %v", err)
+	}
 }
