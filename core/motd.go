@@ -24,6 +24,6 @@ func (b *Bouncer) SendCachedMOTD(ds *DownstreamConnection) {
 	for _, msg := range msgs {
 		// Rewrite the target to be the downstream client's nick
 		msg.Params[0] = ds.Nick
-		b.SendToClient(ds, msg)
+		ds.SendToClient(msg)
 	}
 }

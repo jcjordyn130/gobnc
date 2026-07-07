@@ -105,22 +105,13 @@ func (b *Bouncer) StartAsyncClientWriter(ds *DownstreamConnection) {
 
 			// Send message
 			_, err = ds.Conn.Write(ircmsgb)
+			log.Debug().Msgf("[downstream %s] [ASYNC] Sending message: %v", ds.Conn.RemoteAddr(), msg)
 			if err != nil {
 				log.Error().Msgf("[downstream %s] Error sending response: %v", ds.Conn.RemoteAddr(), err)
 				continue
 			}
 		}
 	}()
-}
-
-func (b *Bouncer) SendToClient(ds *DownstreamConnection, ircmsg ircmsg.Message) error {
-	if ds.msgChan == nil {
-		panic("test")
-	}
-
-	ds.msgChan <- ircmsg
-
-	return nil
 }
 
 func (b *Bouncer) SendHistory(channel *string, ds *DownstreamConnection) {
@@ -151,7 +142,7 @@ func (b *Bouncer) SendHistory(channel *string, ds *DownstreamConnection) {
 
 		// If Write fails (e.g., broken pipe), initiate the cleanup
 		// which will fire ds.Cancel() and kill the DB query.
-		err := b.SendToClient(ds, formsg)
+		err := ds.SendToClient(formsg)
 		if err != nil {
 			log.Debug().Msgf("[downstream %s] Write failed during history, disconnecting", ds.Conn.RemoteAddr())
 			b.DisconnectDownstreamConnection(ds, "broken client")
@@ -204,7 +195,7 @@ func (b *Bouncer) BroadcastToClients(msg ircmsg.Message) {
 			}
 		}
 
-		go b.SendToClient(ds, clientMsg)
+		go ds.SendToClient(clientMsg)
 	}
 }
 
@@ -219,7 +210,7 @@ func (b *Bouncer) ChangeDownstreamNick(newnick string) {
 
 		// Create NICK command
 		nickmsg := ircmsg.MakeMessage(nil, ds.Nick, "NICK", newnick)
-		b.SendToClient(ds, nickmsg)
+		ds.SendToClient(nickmsg)
 
 		// Change internal state
 		ds.Nick = newnick
@@ -297,12 +288,12 @@ func (b *Bouncer) SendDownstreamJoin(ds *DownstreamConnection, channel string) {
 
 	// 1. The JOIN Confirmation
 	joinMsg := ircmsg.MakeMessage(nil, prefix, "JOIN", channel)
-	b.SendToClient(ds, joinMsg)
+	ds.SendToClient(joinMsg)
 
 	// 2. The Topic (332)
 	if chState.Topic != "" {
 		topicMsg := ircmsg.MakeMessage(nil, b.ServerName, "332", ds.Nick, channel, chState.Topic)
-		b.SendToClient(ds, topicMsg)
+		ds.SendToClient(topicMsg)
 	}
 
 	// 3. The Names List (353)
@@ -319,11 +310,11 @@ func (b *Bouncer) SendDownstreamJoin(ds *DownstreamConnection, channel string) {
 	namesStr := strings.Join(nameParts, " ")
 
 	namesMsg := ircmsg.MakeMessage(nil, b.ServerName, "353", ds.Nick, "=", channel, namesStr)
-	b.SendToClient(ds, namesMsg)
+	ds.SendToClient(namesMsg)
 
 	// 4. End of Names (366)
 	endMsg := ircmsg.MakeMessage(nil, b.ServerName, "366", ds.Nick, channel, "End of /NAMES list.")
-	b.SendToClient(ds, endMsg)
+	ds.SendToClient(endMsg)
 
 	// We hath joined!!! send history
 	b.SendHistory(&channel, ds)
@@ -359,7 +350,7 @@ func (b *Bouncer) DisconnectDownstreamConnection(ds *DownstreamConnection, reaso
 	msg := ircmsg.MakeMessage(nil, "", "ERROR", errorPayload)
 
 	// Intentionally ignoring error here
-	_ = b.SendToClient(ds, msg)
+	_ = ds.SendToClient(msg)
 	log.Debug().Msgf("[downstream %s] Sending ERROR to breaking client", ds.Conn.RemoteAddr())
 
 	// Cancel context
@@ -496,7 +487,7 @@ func (b *Bouncer) EchoToOtherClients(sender *DownstreamConnection, msg ircmsg.Me
 			echoMsg.SetTag("time", currentTime)
 		}
 
-		b.SendToClient(ds, echoMsg)
+		ds.SendToClient(echoMsg)
 	}
 }
 
