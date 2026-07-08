@@ -51,3 +51,9 @@ func Handle330(b Router, msg ircmsg.Message) error {
 	b.BroadcastToClients(msg)
 	return nil
 }
+
+func Handle402(b Router, msg ircmsg.Message) error {
+	// Forward message to client
+	b.BroadcastToClients(msg)
+	return nil
+}
