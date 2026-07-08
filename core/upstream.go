@@ -31,9 +31,6 @@ func (b *Bouncer) ConnectToServer(conn *ircevent.Connection) (err error) {
 	upstreamHandlers.Register(b, "474", upstreamHandlers.Handle474) // Cannot join channel (+b)
 	upstreamHandlers.Register(b, "329", upstreamHandlers.Handle329) // Channel creation timestamp
 	upstreamHandlers.Register(b, "473", upstreamHandlers.Handle473) // Cannot join channel (+i)
-	upstreamHandlers.Register(b, "375", upstreamHandlers.Handle375) // MOTD Start
-	upstreamHandlers.Register(b, "372", upstreamHandlers.Handle372) // MOTD line
-	upstreamHandlers.Register(b, "376", upstreamHandlers.Handle376) // MOTD End
 	upstreamHandlers.Register(b, "PART", upstreamHandlers.HandlePART)
 	upstreamHandlers.Register(b, "001", upstreamHandlers.Handle001) // RPL_WELCOME
 	upstreamHandlers.Register(b, "477", upstreamHandlers.Handle477) // Cannot join channel (unregistered)
@@ -57,6 +54,12 @@ func (b *Bouncer) ConnectToServer(conn *ircevent.Connection) (err error) {
 	upstreamHandlers.Register(b, "402", upstreamHandlers.Handle402)
 
 	upstreamHandlers.Register(b, "QUIT", upstreamHandlers.HandleQUIT)
+
+	// MOTD
+	upstreamHandlers.Register(b, "375", upstreamHandlers.Handle375) // MOTD Start
+	upstreamHandlers.Register(b, "372", upstreamHandlers.Handle372) // MOTD line
+	upstreamHandlers.Register(b, "376", upstreamHandlers.Handle376) // MOTD End
+	upstreamHandlers.Register(b, "422", upstreamHandlers.Handle422) // MOTD missing
 
 	// AWAY related handlers
 	upstreamHandlers.Register(b, "305", upstreamHandlers.Handle305) // RPL_305 No Longer Away

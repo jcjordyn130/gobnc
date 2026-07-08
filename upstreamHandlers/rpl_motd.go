@@ -22,3 +22,10 @@ func Handle376(b Router, msg ircmsg.Message) error {
 	b.CacheMOTD(msg)
 	return nil
 }
+
+// MOTD Missing
+func Handle422(b Router, msg ircmsg.Message) error {
+	b.ClearMOTD()
+	b.CacheMOTD(msg)
+	return nil
+}
