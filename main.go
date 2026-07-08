@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"bouncer/cmd"
 	"bouncer/config"
 	"bouncer/core"
 	"bouncer/database"
@@ -24,12 +25,7 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-func mainConnect(ctx context.Context) {
-	conf, err := config.LoadConfig()
-	if err != nil {
-		panic(err)
-	}
-
+func mainConnect(ctx context.Context, db *database.DB, conf *config.Config) {
 	conn := ircevent.Connection{
 		Server: fmt.Sprintf("%s:%d", conf.UpstreamServer, conf.UpstreamPort),
 		UseTLS: conf.UseTLS,
@@ -49,14 +45,8 @@ func mainConnect(ctx context.Context) {
 	// Init bouncer
 	b := core.NewBouncer(&conn)
 
-	// Init database
-	bdb, err := database.NewDB(conf.DBPath, conf.MaxQLen)
-	if err != nil {
-		panic(err)
-	}
-
 	// Assign the DB pointer to avoid copying sync primitives (sync.WaitGroup/noCopy)
-	b.DB = bdb
+	b.DB = db
 
 	// Register downstream handlers
 	// These are commands sent by clients connected to us
@@ -74,7 +64,7 @@ func mainConnect(ctx context.Context) {
 	go listenFIFO(b, conf.FIFOName)
 
 	// Connect to upstream server
-	err = b.ConnectToServer(&conn)
+	err := b.ConnectToServer(&conn)
 	if err != nil {
 		panic("failed to connect to server")
 	}
@@ -111,7 +101,7 @@ func mainConnect(ctx context.Context) {
 
 	// Don't forget the database
 	log.Debug().Msg("Closing database")
-	bdb.Close()
+	db.Close()
 
 	log.Debug().Msg("Byebye :)")
 }
@@ -164,22 +154,22 @@ func listenFIFO(b *core.Bouncer, fifoName string) {
 func main() {
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 
-	// Create context to safely close all of the goroutines when the program is terminated
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer cancel()
-
 	conf, err := config.LoadConfig()
 	if err != nil {
 		panic(err)
 	}
 
 	// Init database
-	bdb, err := database.NewDB(conf.DBPath, conf.MaxQLen)
+	db, err := database.NewDB(conf.DBPath, conf.MaxQLen)
 	if err != nil {
 		panic(err)
 	}
 
-	cmd := &cli.Command{
+	// Create context to safely close all of the goroutines when the program is terminated
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
+	cliCmd := &cli.Command{
 		Name:  "gobnc",
 		Usage: "IRC bouncer",
 		Commands: []*cli.Command{
@@ -187,60 +177,15 @@ func main() {
 				Name:  "connect",
 				Usage: "connect to the upstream server and start the bouncer",
 				Action: func(c context.Context, cmd *cli.Command) error {
-					mainConnect(c)
+					mainConnect(c, db, conf)
 					return nil
 				},
 			},
-			{
-				Name:  "config",
-				Usage: "configure the bouncer",
-				Commands: []*cli.Command{
-					{
-						Name:  "addAutoJoin",
-						Usage: "add a channel to the autojoin list",
-						Flags: []cli.Flag{
-							&cli.StringFlag{
-								Name:     "channel",
-								Aliases:  []string{"c"},
-								Usage:    "the channel to add to the autojoin list",
-								Required: true,
-							},
-						},
-						Action: func(c context.Context, cmd *cli.Command) error {
-							err := bdb.AddAutoJoinChan(cmd.String("channel"))
-							if err != nil {
-								return err
-							}
-
-							return nil
-						},
-					},
-					{
-						Name:  "removeAutoJoin",
-						Usage: "remove a channel from the autojoin list",
-						Flags: []cli.Flag{
-							&cli.StringFlag{
-								Name:     "channel",
-								Aliases:  []string{"c"},
-								Usage:    "the channel to remove from the autojoin list",
-								Required: true,
-							},
-						},
-						Action: func(c context.Context, cmd *cli.Command) error {
-							err := bdb.RemoveAutoJoinChan(cmd.String("channel"))
-							if err != nil {
-								return err
-							}
-
-							return nil
-						},
-					},
-				},
-			},
+			cmd.NewConfigCmd(db).Command(),
 		},
 	}
 
-	if err := cmd.Run(ctx, os.Args); err != nil {
+	if err := cliCmd.Run(ctx, os.Args); err != nil {
 		log.Fatal().Msgf("Error running command: %v", err)
 	}
 }
