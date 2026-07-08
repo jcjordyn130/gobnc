@@ -35,7 +35,9 @@ func NewDB(file string, maxQLen int) (*DB, error) {
 
 	// Check for blank database string, the database itself doesn't check for it.
 	if file == "" {
-		return nil, fmt.Errorf("database file path is empty")
+		log.Warn().Msg("database file path is empty, using *IN MEMORY* database")
+		log.Warn().Msg("Please configure the bouncer!")
+		file = ":memory:"
 	}
 
 	log.Debug().Msgf("[database] Using %d for max queued messages", maxQLen)

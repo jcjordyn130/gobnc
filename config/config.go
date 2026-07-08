@@ -23,7 +23,7 @@ type Config struct {
 	FIFOName                string `mapstructure:"fifoname"`
 }
 
-func LoadConfig() (*Config, error) {
+func LoadConfig(conf *Config, overrides map[string]any) error {
 	v := viper.New()
 
 	// 1. Setup file reading
@@ -40,6 +40,7 @@ func LoadConfig() (*Config, error) {
 	// viper will look for an environment variable named 'BNC_UPSTREAM_SERVER'
 	v.SetEnvPrefix("GOBNC")
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	v.BindEnv("DBPath")
 	v.AutomaticEnv()
 
 	// 3. Set Defaults
@@ -50,19 +51,26 @@ func LoadConfig() (*Config, error) {
 	v.SetDefault("fifoname", "")
 	v.SetDefault("graceful_shutdown_timeout", 30)
 
+	// Inject any overrides for the CLI
+	for k, val := range overrides {
+		log.Debug().Msgf("Setting override %s=%s in config!", k, val)
+		v.Set(k, val)
+	}
+
 	// 4. Read the file
 	if err := v.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			return nil, err // Config file found but had an error
+			return err // Config file found but had an error
 		}
 		log.Debug().Msg("No config file found, using defaults and environment variables")
 	}
 
 	// 5. Unmarshal into struct
-	var conf Config
 	if err := v.Unmarshal(&conf); err != nil {
-		return nil, err
+		return err
 	}
 
-	return &conf, nil
+	log.Trace().Msgf("Config structure: %+v", conf)
+
+	return nil
 }

@@ -15,7 +15,8 @@ import (
 )
 
 func DBFillFakeData(ctx context.Context) error {
-	conf, err := config.LoadConfig()
+	var conf *config.Config
+	err := config.LoadConfig(conf, nil)
 	if err != nil {
 		return err
 	}

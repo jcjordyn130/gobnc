@@ -154,24 +154,75 @@ func listenFIFO(b *core.Bouncer, fifoName string) {
 func main() {
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 
-	conf, err := config.LoadConfig()
-	if err != nil {
-		panic(err)
-	}
-
-	// Init database
-	db, err := database.NewDB(conf.DBPath, conf.MaxQLen)
-	if err != nil {
-		panic(err)
-	}
-
 	// Create context to safely close all of the goroutines when the program is terminated
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
+	// Create variables
+	// WARN: *technically* this is leaving pointers to unallocated memory in DB, but this is just a placeholder
+	// so the program can compile. It will very quickly be overwritten with a valid structure by the Before() function
+	//
+	// It is fine for Config because all it holds is basic types anyways, so they'll all be blank.
+	var conf *config.Config = &config.Config{}
+	var db *database.DB = &database.DB{}
+
 	cliCmd := &cli.Command{
 		Name:  "gobnc",
 		Usage: "IRC bouncer",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:        "dbpath",
+				Aliases:     []string{"db"},
+				Usage:       "save database to `file`",
+				DefaultText: ":memory:",
+			},
+			&cli.StringFlag{
+				Name:        "loglevel",
+				Aliases:     []string{"l"},
+				Usage:       "Max log level",
+				DefaultText: "trace",
+			},
+		},
+
+		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
+			// Process log level
+			levelStr := cmd.String("loglevel")
+			level, err := zerolog.ParseLevel(levelStr)
+			if err != nil {
+				return ctx, fmt.Errorf("invalid log level '%s': %w", levelStr, err)
+			}
+			zerolog.SetGlobalLevel(level)
+
+			// Setup CLI config overrides
+			// Add more as needed
+			overrides := make(map[string]any)
+			if cmd.IsSet("dbpath") {
+				overrides["DBPath"] = cmd.String("dbpath")
+			}
+
+			// The reason we load config/database here instead of outside of CLI parsing
+			// Is so the log level argument affects the two classes while allowing them to be used
+			// by CLI commands.
+			// Load config
+			err = config.LoadConfig(conf, overrides)
+			if err != nil {
+				panic(err)
+			}
+
+			// Init database
+			newdb, err := database.NewDB(conf.DBPath, conf.MaxQLen)
+			if err != nil {
+				panic(err)
+			}
+
+			// Override existing pointer for sub commands
+			// This *has* to happen otherwise the subcommands still point to a nil DB structure
+			// and will cause a segfault.
+			*db = *newdb
+
+			return ctx, nil
+		},
+
 		Commands: []*cli.Command{
 			{
 				Name:  "connect",
