@@ -38,4 +38,41 @@ var registeredMigrations = []Migration{
 			);
 			`,
 	},
+	{
+		Version: 4,
+		Name:    "add_extra_tables",
+		UpSQL: `
+			CREATE TABLE IF NOT EXISTS servers (
+			id	TEXT PRIMARY KEY,
+			domain TEXT,
+			port INTEGER,
+			ssl NOT NULL DEFAULT 0 CHECK (ssl IN (0, 1)),
+			identity TEXT,
+			user TEXT,
+
+			FOREIGN KEY (identity) REFERENCES identities(id) ON DELETE SET NULL,
+			FOREIGN KEY (user) REFERENCES users(id) ON DELETE CASCADE
+			);
+
+			CREATE TABLE IF NOT EXISTS identities (
+			id TEXT PRIMARY KEY,
+			owner TEXT,
+			realname TEXT,
+			nickname TEXT,
+			username TEXT,
+			
+			FOREIGN KEY (owner) REFERENCES users(id) ON DELETE CASCADE
+			);
+
+			CREATE TABLE IF NOT EXISTS users (
+			id TEXT PRIMARY KEY,
+			username TEXT UNIQUE,
+			hashedpw TEXT,
+			defaultidentity TEXT NOT NULL,
+
+			FOREIGN KEY (defaultidentity) REFERENCES identities(id) ON DELETE RESTRICT 
+			DEFERRABLE INITIALLY DEFERRED
+			);
+			`,
+	},
 }

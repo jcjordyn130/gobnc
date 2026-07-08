@@ -182,6 +182,7 @@ func main() {
 				},
 			},
 			cmd.NewConfigCmd(db).Command(),
+			cmd.NewUserCmd(db).Command(),
 		},
 	}
 
