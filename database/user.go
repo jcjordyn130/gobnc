@@ -109,7 +109,7 @@ func (d *DB) AddUser(user User) error {
 
 func (d *DB) RemoveUser(username string) error {
 	log.Debug().Msgf("Removing user %s", username)
-	result, err := d.conn.Exec(`DELETE FROM users WHERE username = ?`)
+	result, err := d.conn.Exec(`DELETE FROM users WHERE username = ?`, username)
 	if err != nil {
 		return fmt.Errorf("failed to remove user: %w", err)
 	}
