@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ergochat/irc-go/ircmsg"
+	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog/log"
 	_ "modernc.org/sqlite"
 )
@@ -16,7 +17,7 @@ import (
 type DB struct {
 	// ... previous fields (ServerConn, Clients, Upstream) ...
 
-	conn     *sql.DB
+	conn     *sqlx.DB
 	LogQueue chan ircmsg.Message // Channel for async database writes
 	wg       sync.WaitGroup
 }
@@ -61,7 +62,7 @@ func NewDB(file string, maxQLen int) (*DB, error) {
 func (db *DB) Init(file string) error {
 	// Open DB connection
 	log.Debug().Msgf("[database] Using file %s", file)
-	conn, err := sql.Open("sqlite", file)
+	conn, err := sqlx.Open("sqlite", file)
 	if err != nil {
 		panic(err)
 	}

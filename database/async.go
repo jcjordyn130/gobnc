@@ -88,7 +88,7 @@ func (db *DB) AsyncGetDirectMessages(ctx context.Context, myNick string, limit i
 	}
 
 	// Call the generic helper
-	return AsyncStreamQuery(ctx, db.conn, query, scanner, myNick, myNick, limit)
+	return AsyncStreamQuery(ctx, db.conn.DB, query, scanner, myNick, myNick, limit)
 }
 
 // AsyncSearchMessages streams history records that match dynamic filters.
@@ -152,5 +152,5 @@ func (db *DB) AsyncSearchMessages(ctx context.Context, filters map[string]string
 	}
 
 	// 4. Fire the generic runner
-	return AsyncStreamQuery(ctx, db.conn, query, scanner, args...)
+	return AsyncStreamQuery(ctx, db.conn.DB, query, scanner, args...)
 }

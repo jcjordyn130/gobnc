@@ -11,10 +11,10 @@ import (
 )
 
 type User struct {
-	Id              string
-	Username        string
-	hashedpw        string
-	Defaultidentity string
+	Id              string `db:"id"`
+	Username        string `db:"username"`
+	HashedPW        string `db:"hashedpw"`
+	Defaultidentity string `db:"defaultidentity"`
 }
 
 func (d *DB) GetUserByUsername(username string) (*User, error) {
@@ -25,7 +25,7 @@ func (d *DB) GetUserByUsername(username string) (*User, error) {
 		SELECT id, username, hashedpw, defaultidentity 
 		FROM users 
 		WHERE username = ?
-	`, username).Scan(&u.Id, &u.Username, &u.hashedpw, &u.Defaultidentity)
+	`, username).Scan(&u.Id, &u.Username, &u.HashedPW, &u.Defaultidentity)
 
 	if err != nil {
 		// Specifically check if the error is because the user doesn't exist
@@ -56,7 +56,7 @@ func (d *DB) GetAllUsers() ([]User, error) {
 		var u User
 
 		// This is here so it is obvious if this function is being misused
-		u.hashedpw = "%%DELETED%%"
+		u.HashedPW = "%%DELETED%%"
 
 		// Scan the current row into our struct variables
 		if err := rows.Scan(&u.Id, &u.Username, &u.Defaultidentity); err != nil {
@@ -98,7 +98,7 @@ func (d *DB) AddUser(user User) error {
 	_, err = tx.Exec(`
 		INSERT INTO users (id, username, hashedpw, defaultidentity) 
 		VALUES (?, ?, ?, ?)`,
-		user.Id, user.Username, user.hashedpw, user.Defaultidentity,
+		user.Id, user.Username, user.HashedPW, user.Defaultidentity,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to insert user: %w", err)
@@ -146,6 +146,42 @@ func (d *DB) RemoveUser(username string) error {
 	return nil
 }
 
+func (d *DB) UpdateUser(u User) error {
+	// 1. Safety Check: Never execute an update without a WHERE clause target
+	if u.Id == "" {
+		return fmt.Errorf("cannot update user: missing user ID")
+	}
+
+	// 2. The SQL Query
+	// sqlx will automatically match the :named_parameters to the `db` tags
+	// on your User struct (e.g., :username maps to `db:"username"`).
+	query := `
+		UPDATE users 
+		SET 
+			username = :username, 
+			hashedpw = :hashedpw, 
+			defaultidentity = :defaultidentity
+		WHERE id = :id`
+
+	// 3. Execute the update using the struct
+	result, err := d.conn.NamedExec(query, u)
+	if err != nil {
+		return fmt.Errorf("failed to execute structure update: %w", err)
+	}
+
+	// 4. Verify the update actually happened
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to check rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("update failed: no user found with id %s", u.Id)
+	}
+
+	return nil
+}
+
 func (d *DB) NewUser(username string) User {
 	log.Debug().Msgf("Creating new user for %s", username)
 
@@ -168,14 +204,14 @@ func (u *User) SetPassword(password string) error {
 		return fmt.Errorf("failed to hash password: %w", err)
 	}
 
-	u.hashedpw = string(hashedBytes)
+	u.HashedPW = string(hashedBytes)
 
 	return nil
 }
 
 func (u *User) VerifyPassword(password string) (bool, error) {
 	// 2. Compare password against stored hash
-	err := bcrypt.CompareHashAndPassword([]byte(u.hashedpw), []byte(password))
+	err := bcrypt.CompareHashAndPassword([]byte(u.HashedPW), []byte(password))
 	if err != nil {
 		if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
 			log.Debug().Msgf("Password verify for %s failed", u.Username)

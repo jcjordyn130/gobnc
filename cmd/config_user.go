@@ -93,6 +93,36 @@ func (c *UserCmd) validateUser(ctx context.Context, cmd *cli.Command) error {
 	return nil
 }
 
+func (c *UserCmd) changePW(ctx context.Context, cmd *cli.Command) error {
+	// Get arguments
+	username := cmd.Args().First()
+	if username == "" {
+		return fmt.Errorf("error: username is required")
+	}
+
+	password := cmd.Args().Get(1)
+	if password == "" {
+		return fmt.Errorf("error: new password is required")
+	}
+
+	// Get datatypes and verify
+	user, err := c.db.GetUserByUsername(username)
+	if err != nil {
+		return err
+	}
+
+	// Update password
+	user.SetPassword(password)
+
+	// Commit user
+	err = c.db.UpdateUser(*user)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (c *UserCmd) listUsers(ctx context.Context, cmd *cli.Command) error {
 	// Get users
 	users, err := c.db.GetAllUsers()
@@ -139,6 +169,18 @@ func (c *UserCmd) Command() *cli.Command {
 				Usage:     "validates a password against a username",
 				ArgsUsage: "<username> <password>",
 				Action:    c.validateUser,
+			},
+			{
+				Name:  "update",
+				Usage: "update a user",
+				Commands: []*cli.Command{
+					{
+						Name:      "password",
+						Usage:     "changes a users password",
+						ArgsUsage: "<username> <password>",
+						Action:    c.changePW,
+					},
+				},
 			},
 		},
 	}
