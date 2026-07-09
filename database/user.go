@@ -17,22 +17,19 @@ type User struct {
 	Defaultidentity string `db:"defaultidentity"`
 }
 
+var redactedVal string = "%%REDACTED%%"
+
 func (d *DB) GetUserByUsername(username string) (*User, error) {
 	var u User
 
-	// QueryRow executes a query that is expected to return at most one row.
-	err := d.conn.QueryRow(`
-		SELECT id, username, hashedpw, defaultidentity 
-		FROM users 
-		WHERE username = ?
-	`, username).Scan(&u.Id, &u.Username, &u.HashedPW, &u.Defaultidentity)
-
+	// sqlx's Get executes the query and unmarshals the single row into the struct.
+	err := d.conn.Get(&u, `SELECT id, username, hashedpw, defaultidentity FROM users WHERE username = ?`, username)
 	if err != nil {
-		// Specifically check if the error is because the user doesn't exist
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("user '%s' not found", username)
 		}
-		// Handle any other actual database errors (connection lost, bad syntax, etc.)
+
+		// Handle any other actual database errors
 		return nil, fmt.Errorf("error fetching user from database: %w", err)
 	}
 
@@ -40,35 +37,20 @@ func (d *DB) GetUserByUsername(username string) (*User, error) {
 }
 
 func (d *DB) GetAllUsers() ([]User, error) {
-	// 1. Use Query instead of QueryRow to fetch multiple records
-	rows, err := d.conn.Query(`SELECT id, username, defaultidentity FROM users`)
+	// We can initialize an empty slice of users directly.
+	// Ensure you use []User, not []*User, unless your requirements specifically demand pointers here.
+	var users []User
+
+	// Select executes a query, iterates over rows, and unmarshals them into the slice.
+	// It automatically closes the rows and handles iteration errors for you.
+	err := d.conn.Select(&users, `SELECT id, username, defaultidentity FROM users`)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query users: %w", err)
 	}
 
-	// CRITICAL: Always defer closing the rows to prevent connection leaks!
-	defer rows.Close()
-
-	var users []User
-
-	// 2. Iterate through the rows
-	for rows.Next() {
-		var u User
-
-		// This is here so it is obvious if this function is being misused
-		u.HashedPW = "%%DELETED%%"
-
-		// Scan the current row into our struct variables
-		if err := rows.Scan(&u.Id, &u.Username, &u.Defaultidentity); err != nil {
-			return nil, fmt.Errorf("error scanning user row: %w", err)
-		}
-		users = append(users, u)
-	}
-
-	// 3. Check for errors that might have occurred during iteration
-	// (e.g., the network connection dropped halfway through fetching the list)
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating over user rows: %w", err)
+	// Callers don't need the raw hashed password
+	for i := range users {
+		users[i].HashedPW = redactedVal
 	}
 
 	return users, nil
@@ -127,7 +109,7 @@ func (d *DB) AddUser(user User) error {
 
 func (d *DB) RemoveUser(username string) error {
 	log.Debug().Msgf("Removing user %s", username)
-	result, err := d.conn.Exec(`DELETE FROM users WHERE username == '?'`)
+	result, err := d.conn.Exec(`DELETE FROM users WHERE username = ?`)
 	if err != nil {
 		return fmt.Errorf("failed to remove user: %w", err)
 	}
@@ -210,6 +192,11 @@ func (u *User) SetPassword(password string) error {
 }
 
 func (u *User) VerifyPassword(password string) (bool, error) {
+	// Check for password redaction first
+	if u.HashedPW == redactedVal {
+		return false, fmt.Errorf("Password Hash for '%s' has been redacted...", u.Username)
+	}
+
 	// 2. Compare password against stored hash
 	err := bcrypt.CompareHashAndPassword([]byte(u.HashedPW), []byte(password))
 	if err != nil {
