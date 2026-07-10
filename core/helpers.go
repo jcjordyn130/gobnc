@@ -1,23 +1,45 @@
 package core
 
-import "github.com/rs/zerolog/log"
+import (
+	"fmt"
+	"strings"
 
-// Helper to separate prefixes from nicknames
+	"github.com/rs/zerolog/log"
+)
+
+// @ +o Operator
+// ~ +q Founder
+// & +a Admin
+// % +h Half-Operator
+// + +v Voice
+var validNickPrefixes string = "~&@%+"
+
 func parsePrefix(rawNick string) (nick string, prefix string) {
+	// Avoid crashing below if we are, somehow, given a blank nick
 	if len(rawNick) == 0 {
+		log.Debug().Msg("Blank raw nickname given to parsePrefix")
 		return "", ""
 	}
-	// Common IRC prefixes
-	switch rawNick[0] {
-	case '~', '&', '@', '%', '+':
-		return rawNick[1:], string(rawNick[0])
-	default:
-		return rawNick, ""
+
+	var prefixes string
+	var nickStart int
+
+	for i, char := range rawNick {
+		if strings.ContainsRune(validNickPrefixes, char) {
+			prefix += string(char)
+			nickStart = i + 1
+		} else {
+			break
+		}
 	}
+
+	log.Debug().Str("nick", rawNick[nickStart:]).Str("prefix", prefixes).Msgf("Parsed prefix/nick for raw nick %s", rawNick)
+	return rawNick[nickStart:], prefixes
 }
 
 // Helper to map IRC mode characters to NAMES list prefixes
 func modeToPrefix(mode rune) string {
+	log.Trace().Msgf("Parsing mode %c to prefix", mode)
 	switch mode {
 	case 'o':
 		return "@" // Operator
@@ -30,7 +52,12 @@ func modeToPrefix(mode rune) string {
 	case 'q':
 		return "~" // Founder
 	default:
-		log.Debug().Msgf("Invalid rune %c receieved for modeToPrefix", mode)
+		BUG(fmt.Sprintf("Invalid rune %c receieved for modeToPrefix", mode))
 		return ""
 	}
+}
+
+func BUG(errString string) {
+	log.Warn().Msgf("[BUG]: %s", errString)
+	log.Warn().Msg("Please run at a debug loglevel and make a bug report. Thank you!")
 }
