@@ -22,8 +22,7 @@ func (b *Bouncer) SendCachedMOTD(ds *DownstreamConnection) {
 	b.motd_mu.RUnlock()
 
 	for _, msg := range msgs {
-		// Rewrite the target to be the downstream client's nick
-		msg.Params[0] = ds.Nick
+		msg := b.spoofSource(ds, msg)
 		ds.SendToClient(msg)
 	}
 }
