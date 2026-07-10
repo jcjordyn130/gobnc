@@ -214,8 +214,11 @@ func (b *Bouncer) sendOpenQueries(ds *DownstreamConnection) {
 		recvCount++
 		// Rewrite historical notices as private messages so clients
 		// like HexChat are forced to open a query window for them.
+		//
+		// ONLY do this for user (not server) messages, otherwise you get a DM
+		// from irc.libera.chat
 		playbackCmd := chatMsg.Command
-		if playbackCmd == "NOTICE" {
+		if playbackCmd == "NOTICE" && strings.Contains(chatMsg.Source, "!") {
 			playbackCmd = "PRIVMSG"
 		}
 
