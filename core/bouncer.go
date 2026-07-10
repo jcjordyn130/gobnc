@@ -251,6 +251,7 @@ func (b *Bouncer) SendDownstreamJoin(ds *DownstreamConnection, channel string) {
 	b.mu.RUnlock()
 
 	if !exists {
+		log.Trace().Msgf("[downstream %s] Downstream JOIN requested for channel we are not in", ds.Conn.RemoteAddr())
 		return // We aren't actually in this channel
 	}
 
@@ -266,25 +267,8 @@ func (b *Bouncer) SendDownstreamJoin(ds *DownstreamConnection, channel string) {
 		ds.SendToClient(topicMsg)
 	}
 
-	// 3. The Names List (353)
-	// We rebuild the space-separated string: "@Alice +Bob Charlie"
-	var nameParts []string
-	b.mu.RLock() // Lock again just to read the map safely
-	for nick, userPrefix := range chState.Users {
-		nameParts = append(nameParts, userPrefix+nick)
-	}
-	b.mu.RUnlock()
-
-	// Note: For massive channels, you'd want to split nameParts into chunks of ~15
-	// so the IRC line doesn't exceed 512 bytes. For now, strings.Join is fine.
-	namesStr := strings.Join(nameParts, " ")
-
-	namesMsg := ircmsg.MakeMessage(nil, b.ServerName, "353", ds.Nick, "=", channel, namesStr)
-	ds.SendToClient(namesMsg)
-
-	// 4. End of Names (366)
-	endMsg := ircmsg.MakeMessage(nil, b.ServerName, "366", ds.Nick, channel, "End of /NAMES list.")
-	ds.SendToClient(endMsg)
+	// Send /NAMES
+	b.sendNamesList(ds, chState)
 
 	// We hath joined!!! send history
 	b.SendHistory(&channel, ds)
