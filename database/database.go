@@ -31,6 +31,13 @@ type ChatMessage struct {
 	Command   string
 }
 
+type FKViolation struct {
+	Table  string
+	RowID  int64
+	Parent string
+	Fkid   sql.NullString
+}
+
 func NewDB(file string, maxQLen int) (*DB, error) {
 	db := DB{}
 
@@ -59,6 +66,58 @@ func NewDB(file string, maxQLen int) (*DB, error) {
 	return &db, nil
 }
 
+func (db *DB) Check() error {
+	// Check to make sure we even HAVE a connec tion first.
+	if db.conn == nil {
+		return fmt.Errorf("database is not open yet!")
+	}
+
+	// Run integrity check first
+	log.Debug().Msg("[database] Running integry check!")
+	result, err := db.conn.Query("PRAGMA integrity_check;")
+	if err != nil {
+		return err
+	}
+	defer result.Close()
+
+	for result.Next() {
+		var res string
+		if err := result.Scan(&res); err != nil {
+			return err
+		}
+
+		if res != "ok" {
+			log.Error().Msgf("[database] Corrupt row found: %s", res)
+		}
+	}
+
+	if err := result.Err(); err != nil {
+		return err
+	}
+
+	// Now check foreign keys
+	log.Debug().Msg("[database] Running foreign key check!")
+	var violations []FKViolation
+
+	// Use Select to fetch and bind all rows automatically
+	err = db.conn.Select(&violations, "PRAGMA foreign_key_check;")
+	if err != nil {
+		return err
+	}
+
+	// Check results
+	if len(violations) == 0 {
+		return nil
+	}
+
+	for _, v := range violations {
+		log.Error().Msgf("Violation in table '%s' (RowID: %d). Missing parent key in '%s'.\n",
+			v.Table, v.RowID, v.Parent)
+	}
+
+	return nil
+}
+
 func (db *DB) Init(file string) error {
 	// Open DB connection
 	log.Debug().Msgf("[database] Using file %s", file)
@@ -77,13 +136,22 @@ func (db *DB) Init(file string) error {
 	conn.SetMaxOpenConns(10)
 
 	// Enable WAL for increased performance
+	log.Trace().Msg("[database] Enabling WAL mode")
 	if _, err := conn.Exec("PRAGMA journal_mode=WAL;"); err != nil {
 		log.Debug().Msgf("[database] Error enabling WAL mode for DB: %v", &err)
 	}
 
 	// WAL means we don't need hard syncing for the database
+	log.Trace().Msg("[database] Enabling NORMAL sync mode")
 	if _, err := conn.Exec("PRAGMA synchronous = NORMAL;"); err != nil {
 		log.Debug().Msgf("[database] Error enabling NORMAL sync mode for DB: %v", &err)
+	}
+
+	// Enable foreign key constraints
+	log.Trace().Msg("[database] Enabling foreign key constraints")
+	if _, err := conn.Exec("PRAGMA foreign_keys = ON;"); err != nil {
+		log.Debug().Msgf("[database] Error enabling foreign key constraints")
+		return err
 	}
 
 	// Init DB schema
