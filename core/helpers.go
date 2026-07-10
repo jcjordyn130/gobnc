@@ -21,20 +21,20 @@ func parsePrefix(rawNick string) (nick string, prefix string) {
 		return "", ""
 	}
 
-	var prefixes string
+	var prefixes strings.Builder
 	var nickStart int
 
 	for i, char := range rawNick {
 		if strings.ContainsRune(validNickPrefixes, char) {
-			prefix += string(char)
+			prefixes.WriteString(string(char))
 			nickStart = i + 1
 		} else {
 			break
 		}
 	}
 
-	log.Debug().Str("nick", rawNick[nickStart:]).Str("prefix", prefixes).Msgf("Parsed prefix/nick for raw nick %s", rawNick)
-	return rawNick[nickStart:], prefixes
+	log.Debug().Str("nick", rawNick[nickStart:]).Str("prefix", prefixes.String()).Msgf("Parsed prefix/nick for raw nick %s", rawNick)
+	return rawNick[nickStart:], prefixes.String()
 }
 
 // Helper to map IRC mode characters to NAMES list prefixes
