@@ -187,11 +187,17 @@ func main() {
 		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
 			// Process log level
 			levelStr := cmd.String("loglevel")
-			level, err := zerolog.ParseLevel(levelStr)
-			if err != nil {
-				return ctx, fmt.Errorf("invalid log level '%s': %w", levelStr, err)
+
+			// This is because levelStr is blank by default
+			// but zerolog disables logging for a blank level string.
+			if levelStr != "" {
+				level, err := zerolog.ParseLevel(levelStr)
+				if err != nil {
+					return ctx, fmt.Errorf("invalid log level '%s': %w", levelStr, err)
+				}
+
+				zerolog.SetGlobalLevel(level)
 			}
-			zerolog.SetGlobalLevel(level)
 
 			// Setup CLI config overrides
 			// Add more as needed
@@ -204,7 +210,7 @@ func main() {
 			// Is so the log level argument affects the two classes while allowing them to be used
 			// by CLI commands.
 			// Load config
-			err = config.LoadConfig(conf, overrides)
+			err := config.LoadConfig(conf, overrides)
 			if err != nil {
 				panic(err)
 			}
