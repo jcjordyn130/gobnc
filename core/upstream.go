@@ -65,6 +65,9 @@ func (b *Bouncer) ConnectToServer(conn *ircevent.Connection) (err error) {
 	upstreamHandlers.Register(b, "305", upstreamHandlers.Handle305) // RPL_305 No Longer Away
 	upstreamHandlers.Register(b, "306", upstreamHandlers.Handle306) // RPL_306 Client Away
 
+	// Identification related handlers (vhost, nickserv, etc)
+	upstreamHandlers.Register(b, "396", upstreamHandlers.Handle396)
+
 	// Connect to the upstream server
 	err = conn.Connect()
 	if err != nil {
