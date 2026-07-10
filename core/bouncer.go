@@ -149,24 +149,28 @@ func (b *Bouncer) BroadcastToClients(msg ircmsg.Message) {
 		}
 
 		// Copy message so we can modify it for each client if needed (e.g., add server-time)
-		clientMsg := msg
-
-		// Strict clients drop numerics if the prefix doesn't match what the bouncer is, so lets spoof it
-		if len(clientMsg.Command) == 3 && clientMsg.Command[0] >= '0' && clientMsg.Command[0] <= '9' {
-			log.Debug().Msgf("[downstream %s] Spoofing prefix for numeric %s to bouncer server name %s", ds.Conn.RemoteAddr(), clientMsg.Command, b.ServerName)
-			clientMsg.Source = b.ServerName
-
-			if len(clientMsg.Params) > 0 {
-				log.Debug().Msgf("[downstream %s] Replacing first param %s with downstream nick %s", ds.Conn.RemoteAddr(), clientMsg.Params[0], ds.Nick)
-				newParams := make([]string, len(clientMsg.Params))
-				copy(newParams, clientMsg.Params)
-				newParams[0] = ds.Nick // Replace the first param with the client's nick
-				clientMsg.Params = newParams
-			}
-		}
+		clientMsg := b.spoofSource(ds, msg)
 
 		go ds.SendToClient(clientMsg)
 	}
+}
+
+func (b *Bouncer) spoofSource(ds *DownstreamConnection, msg ircmsg.Message) ircmsg.Message {
+	// Strict clients drop numerics if the prefix doesn't match what the bouncer is, so lets spoof it
+	if len(msg.Command) == 3 && msg.Command[0] >= '0' && msg.Command[0] <= '9' {
+		log.Debug().Msgf("[downstream %s] Spoofing prefix for numeric %s to bouncer server name %s", ds.Conn.RemoteAddr(), msg.Command, b.ServerName)
+		msg.Source = b.ServerName
+
+		if len(msg.Params) > 0 {
+			log.Debug().Msgf("[downstream %s] Replacing first param %s with downstream nick %s", ds.Conn.RemoteAddr(), msg.Params[0], ds.Nick)
+			newParams := make([]string, len(msg.Params))
+			copy(newParams, msg.Params)
+			newParams[0] = ds.Nick // Replace the first param with the client's nick
+			msg.Params = newParams
+		}
+	}
+
+	return msg
 }
 
 func (b *Bouncer) LogToDB(msg ircmsg.Message) {
