@@ -10,8 +10,14 @@ import (
 )
 
 func HandleQUIT(b *core.Bouncer, ds *core.DownstreamConnection, msg ircmsg.Message) error {
-	// XXX: this *might* be safe, idk if the library checks for valid commands for us
-	quitMsg := msg.Params[0]
+	var quitMsg string
+
+	if len(msg.Params) > 0 {
+		quitMsg = msg.Params[0]
+	} else {
+		quitMsg = "default quit message"
+	}
+
 	log.Debug().Msgf("[downstream %s] QUIT received with message %s", ds.Conn.RemoteAddr(), quitMsg)
 
 	b.DisconnectDownstreamConnection(ds, quitMsg)
