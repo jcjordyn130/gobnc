@@ -241,6 +241,7 @@ func main() {
 			cmd.NewConfigCmd(db).Command(),
 			cmd.NewUserCmd(db).Command(),
 			cmd.NewDBCmd(db).Command(),
+			cmd.NewServerCmd(db).Command(),
 		},
 	}
 

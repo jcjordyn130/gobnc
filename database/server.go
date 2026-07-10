@@ -4,6 +4,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+
+	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
 )
 
 type Server struct {
@@ -47,61 +50,31 @@ func (d *DB) GetAllServers() ([]Server, error) {
 	return servers, nil
 }
 
-/*
-func (d *DB) AddUser(user User) error {
-	if user.Id == "" {
-		panic("null user.id")
+func (d *DB) AddServer(s Server) error {
+	// Safety check to ensure an ID is present before inserting
+	if s.Id == "" {
+		return fmt.Errorf("cannot insert server: missing server ID")
 	}
 
-	// 2. Start a transaction because of the circular foreign keys
-	log.Debug().Msg("Starting database transaction for AddUser")
-	tx, err := d.conn.Begin() // Replace d.db with your actual *sql.DB variable
+	// The SQL Query using named parameters.
+	// sqlx automatically matches the :named_parameters (e.g., :domain)
+	// to the `db` tags on your Server struct (e.g., `db:"domain"`).
+	query := `
+		INSERT INTO servers (id, domain, port, ssl, identity, user)
+		VALUES (:id, :domain, :port, :ssl, :identity, :user)`
+
+	// Execute the insert using the struct directly
+	_, err := d.conn.NamedExec(query, s)
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		return fmt.Errorf("failed to insert server: %w", err)
 	}
 
-	// Defer a rollback in case anything panics or errors out
-	defer tx.Rollback()
-
-	// Create ID for identity
-	user.Defaultidentity = uuid.New().String()
-	log.Debug().Msgf("Using identity ID %s for default for user %s", user.Defaultidentity, user.Username)
-
-	// 3. Insert the User
-	log.Debug().Msg("Inserting User")
-	_, err = tx.Exec(`
-		INSERT INTO users (id, username, hashedpw, defaultidentity)
-		VALUES (?, ?, ?, ?)`,
-		user.Id, user.Username, user.HashedPW, user.Defaultidentity,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to insert user: %w", err)
-	}
-
-	// 4. Insert the Default Identity
-	log.Debug().Msg("Inserting Default Identity")
-	_, err = tx.Exec(`
-		INSERT INTO identities (id, owner, realname, nickname, username)
-		VALUES (?, ?, ?, ?, ?)`,
-		user.Defaultidentity, user.Id, user.Username, user.Username, user.Username,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to insert default identity: %w", err)
-	}
-
-	// 5. Commit the transaction (this is when the DEFERRABLE constraints are checked!)
-	log.Debug().Msg("Comitting transaction for AddUser")
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
-	log.Info().Msgf("Successfully added user %s to database", user.Username)
 	return nil
 }
 
-func (d *DB) RemoveUser(username string) error {
-	log.Debug().Msgf("Removing user %s", username)
-	result, err := d.conn.Exec(`DELETE FROM users WHERE username = ?`, username)
+func (d *DB) RemoveServer(s Server) error {
+	log.Debug().Msgf("Removing server %s", s.Id)
+	result, err := d.conn.Exec(`DELETE FROM servers WHERE id = ?`, s.Id)
 	if err != nil {
 		return fmt.Errorf("failed to remove user: %w", err)
 	}
@@ -114,15 +87,15 @@ func (d *DB) RemoveUser(username string) error {
 
 	// 3. If zero rows were affected, the user didn't exist
 	if rowsAffected == 0 {
-		return fmt.Errorf("user '%s' does not exist", username)
+		return fmt.Errorf("server '%s' does not exist", s.Id)
 	}
 
 	return nil
 }
 
-func (d *DB) UpdateUser(u User) error {
+func (d *DB) UpdateServer(s Server) error {
 	// 1. Safety Check: Never execute an update without a WHERE clause target
-	if u.Id == "" {
+	if s.Id == "" {
 		return fmt.Errorf("cannot update user: missing user ID")
 	}
 
@@ -130,15 +103,17 @@ func (d *DB) UpdateUser(u User) error {
 	// sqlx will automatically match the :named_parameters to the `db` tags
 	// on your User struct (e.g., :username maps to `db:"username"`).
 	query := `
-		UPDATE users
+		UPDATE server
 		SET
-			username = :username,
-			hashedpw = :hashedpw,
-			defaultidentity = :defaultidentity
+			domain = :domain,
+			port = :port,
+			ssl = :ssl,
+			identity = :identity,
+			user = :user
 		WHERE id = :id`
 
 	// 3. Execute the update using the struct
-	result, err := d.conn.NamedExec(query, u)
+	result, err := d.conn.NamedExec(query, s)
 	if err != nil {
 		return fmt.Errorf("failed to execute structure update: %w", err)
 	}
@@ -150,56 +125,28 @@ func (d *DB) UpdateUser(u User) error {
 	}
 
 	if rowsAffected == 0 {
-		return fmt.Errorf("update failed: no user found with id %s", u.Id)
+		return fmt.Errorf("update failed: no server found with id %s", s.Id)
 	}
 
 	return nil
 }
 
-func (d *DB) NewUser(username string) User {
-	log.Debug().Msgf("Creating new user for %s", username)
+func (d *DB) NewServer(u User) Server {
+	// BOOM!
+	if u.Id == "" || u.Defaultidentity == "" {
+		panic("u.Id or u.Defaultidentity blank in NewServer")
+	}
 
-	var u User
+	log.Debug().Msgf("Creating new server for %s", u.Username)
+
+	var s Server
 
 	// Generate id
-	u.Id = uuid.New().String()
-	u.Username = username
+	s.Id = uuid.New().String()
+	s.User = u.Id
+	s.Identity = u.Defaultidentity
 
-	log.Debug().Msgf("UUID for user %s: %s", u.Username, u.Id)
+	log.Debug().Msgf("UUID for server %s: %s", s.Domain, s.Id)
 
-	return u
+	return s
 }
-
-func (u *User) SetPassword(password string) error {
-	log.Debug().Msgf("Hashing password for %s", u.Username)
-
-	hashedBytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		return fmt.Errorf("failed to hash password: %w", err)
-	}
-
-	u.HashedPW = string(hashedBytes)
-
-	return nil
-}
-
-func (u *User) VerifyPassword(password string) (bool, error) {
-	// Check for password redaction first
-	if u.HashedPW == redactedVal {
-		return false, fmt.Errorf("Password Hash for '%s' has been redacted...", u.Username)
-	}
-
-	// 2. Compare password against stored hash
-	err := bcrypt.CompareHashAndPassword([]byte(u.HashedPW), []byte(password))
-	if err != nil {
-		if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
-			log.Debug().Msgf("Password verify for %s failed", u.Username)
-			return false, nil // Invalid password
-		}
-		return false, err
-	}
-
-	log.Debug().Msgf("Password verify for %s succeeded", u.Username)
-	return true, nil // Authentication successful
-}
-*/
