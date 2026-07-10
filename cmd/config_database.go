@@ -33,6 +33,17 @@ func (c *DBCmd) validateDB(ctx context.Context, cmd *cli.Command) error {
 	return nil
 }
 
+func (c *DBCmd) vacDB(ctx context.Context, cmd *cli.Command) error {
+	log.Info().Msg("Optimizing database...")
+	err := c.db.Optimize()
+	if err != nil {
+		return err
+	}
+
+	log.Info().Msg("Optimization complete.")
+	return nil
+}
+
 func (c *DBCmd) Command() *cli.Command {
 	return &cli.Command{
 		Name:  "database",
@@ -43,6 +54,12 @@ func (c *DBCmd) Command() *cli.Command {
 				Usage:     "check database for consistency",
 				ArgsUsage: "",
 				Action:    c.validateDB,
+			},
+			{
+				Name:      "optimize",
+				Usage:     "defragments DB",
+				ArgsUsage: "",
+				Action:    c.vacDB,
 			},
 		},
 	}

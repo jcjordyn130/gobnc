@@ -67,7 +67,7 @@ func NewDB(file string, maxQLen int) (*DB, error) {
 }
 
 func (db *DB) Check() error {
-	// Check to make sure we even HAVE a connec tion first.
+	// Check to make sure we even HAVE a connection first.
 	if db.conn == nil {
 		return fmt.Errorf("database is not open yet!")
 	}
@@ -105,14 +105,30 @@ func (db *DB) Check() error {
 		return err
 	}
 
-	// Check results
-	if len(violations) == 0 {
-		return nil
-	}
-
 	for _, v := range violations {
 		log.Error().Msgf("Violation in table '%s' (RowID: %d). Missing parent key in '%s'.\n",
 			v.Table, v.RowID, v.Parent)
+	}
+
+	// Check results
+	if len(violations) == 0 {
+		return nil
+	} else {
+		return fmt.Errorf("%d errors found", len(violations))
+	}
+}
+
+func (db *DB) Optimize() error {
+	log.Trace().Msg("[database] Optimizing database")
+	if _, err := db.conn.Exec("PRAGMA optimize=0x10002;"); err != nil {
+		log.Debug().Msgf("[database] Error optimizing database: %v", &err)
+		return err
+	}
+
+	log.Trace().Msg("[database] Vacuuming database")
+	if _, err := db.conn.Exec("VACUUM;"); err != nil {
+		log.Debug().Msgf("[database] Error vacuuming database: %v", &err)
+		return err
 	}
 
 	return nil
