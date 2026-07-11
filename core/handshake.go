@@ -211,8 +211,19 @@ func (b *Bouncer) sendOpenQueries(ds *DownstreamConnection) {
 
 	recvCount := 0
 
+	// Create single message structure to reuse
+	// These allocate a TON of memory when being sent this quickly
+	reuseMsg := ircmsg.MakeMessage(nil, "", "PRIVMSG", ds.Nick, "")
+
 	for chatMsg := range msgChan {
 		recvCount++
+
+		// Skip replying direct CTCP messages if they somehow ended up in the backlog.
+		if strings.HasPrefix(chatMsg.Content, "\x01") {
+			log.Debug().Msgf("[downstream %s] Skipping direct CTCP message from DB channel: %s", ds.Conn.RemoteAddr(), chatMsg.Content)
+			continue
+		}
+
 		// Rewrite historical notices as private messages so clients
 		// like HexChat are forced to open a query window for them.
 		//
@@ -223,22 +234,22 @@ func (b *Bouncer) sendOpenQueries(ds *DownstreamConnection) {
 			playbackCmd = "PRIVMSG"
 		}
 
-		// Skip replying direct CTCP messages if they somehow ended up in the backlog.
-		if strings.HasPrefix(chatMsg.Content, "\x01") {
-			log.Debug().Msgf("[downstream %s] Skipping direct CTCP message from DB channel: %s", ds.Conn.RemoteAddr(), chatMsg.Content)
-			continue
-		}
+		// Modify the Message structure directly
+		reuseMsg.Source = chatMsg.Source
+		reuseMsg.Command = playbackCmd
 
-		forMsg := ircmsg.MakeMessage(nil, chatMsg.Source, playbackCmd, ds.Nick, chatMsg.Content)
+		// Overwrite existing parms
+		reuseMsg.Params[0] = ds.Nick
+		reuseMsg.Params[1] = chatMsg.Content
 
 		// Add IRCv3 server-time tag if the client negotiated it during the CAP phase
 		if ds.Caps["server-time"] {
 			timeStr := time.Unix(chatMsg.Timestamp, 0).Format(time.RFC3339Nano)
-			forMsg.SetTag("time", timeStr)
+			reuseMsg.SetTag("time", timeStr)
 		}
 
 		// Send to the downstream client
-		if err := ds.SendToClient(forMsg); err != nil {
+		if err := ds.SendToClient(reuseMsg); err != nil {
 			log.Debug().Msgf("[downstream %s] Write failed during PM history: %v", ds.Conn.RemoteAddr(), err)
 			// If the socket dies, remove the client. This fires ds.Cancel(),
 			// which kills the SQLite query running in the DB worker.

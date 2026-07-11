@@ -60,5 +60,6 @@ type DownstreamConnection struct {
 	HandshakeComplete bool
 
 	// internal channel to use for messages
-	msgChan chan ircmsg.Message
+	//msgChan chan ircmsg.Message
+	msgChan chan []byte
 }

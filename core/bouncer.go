@@ -103,19 +103,26 @@ func (b *Bouncer) SendHistory(channel *string, ds *DownstreamConnection) {
 		msgChan, errChan = b.DB.AsyncGetMessages(ds.Ctx, 99999999)
 	}
 
+	reuseMsg := ircmsg.MakeMessage(nil, "", "PRIVMSG", "", "")
+
 	for chatmsg := range msgChan {
-		formsg := ircmsg.MakeMessage(nil, chatmsg.Source, "PRIVMSG", chatmsg.Target, chatmsg.Content)
+		reuseMsg.Source = chatmsg.Source
+		reuseMsg.Command = chatmsg.Command // Keep chan notices
+
+		// Overwrite params
+		reuseMsg.Params[0] = chatmsg.Target
+		reuseMsg.Params[1] = chatmsg.Content
 
 		// Add server-time
 		if ds.Caps["server-time"] {
 			// Format UNIX epoch as ISO time as IRCv3 dictates
 			timeStr := time.Unix(chatmsg.Timestamp, 0).Format(time.RFC3339Nano)
-			formsg.SetTag("time", timeStr)
+			reuseMsg.SetTag("time", timeStr)
 		}
 
 		// If Write fails (e.g., broken pipe), initiate the cleanup
 		// which will fire ds.Cancel() and kill the DB query.
-		err := ds.SendToClient(formsg)
+		err := ds.SendToClient(reuseMsg)
 		if err != nil {
 			log.Debug().Msgf("[downstream %s] Write failed during history, disconnecting", ds.Conn.RemoteAddr())
 			b.DisconnectDownstreamConnection(ds, "broken client")

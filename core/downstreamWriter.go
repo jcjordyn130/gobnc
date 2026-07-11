@@ -2,6 +2,7 @@ package core
 
 import (
 	"bufio"
+	"strings"
 	"time"
 
 	"github.com/ergochat/irc-go/ircmsg"
@@ -9,34 +10,33 @@ import (
 )
 
 func (ds *DownstreamConnection) StartAsyncClientWriter() {
-	ds.msgChan = make(chan ircmsg.Message)
+	ds.msgChan = make(chan []byte)
 	writer := bufio.NewWriter(ds.Conn)
 
 	ticker := time.NewTicker(75 * time.Millisecond)
 
 	go func() {
+		// Ensure the ticker is properly stopped
+		defer ticker.Stop()
+
 		for {
 			select {
-			case msg, ok := <-ds.msgChan:
+			case ircmsgb, ok := <-ds.msgChan:
 				if !ok {
 					log.Debug().Msgf("[downstream %s] Exiting AsyncClientWriter loop due to !ok on channel", ds.Conn.RemoteAddr())
 					writer.Flush()
 					return
 				}
 
-				// Get message
-				ircmsgb, err := msg.LineBytes()
-				if err != nil {
-					log.Error().Msgf("[downstream %s] Error sending response: %v", ds.Conn.RemoteAddr(), err)
-					continue
-				}
-
 				// Send message
-				_, err = writer.Write(ircmsgb)
-				log.Debug().Msgf("[downstream %s] [ASYNC] Sending message: %v", ds.Conn.RemoteAddr(), msg)
+				_, err := writer.Write(ircmsgb)
+				log.Debug().Msgf("[downstream %s] [ASYNC] Sending message: %s", ds.Conn.RemoteAddr(), strings.TrimSpace(string(ircmsgb)))
 				if err != nil {
-					log.Error().Msgf("[downstream %s] Error sending response: %v", ds.Conn.RemoteAddr(), err)
-					continue
+					log.Error().Msgf("[downstream %s] FATAL Error sending response: %v", ds.Conn.RemoteAddr(), err)
+					if ds.Cancel != nil {
+						ds.Cancel()
+					}
+					return
 				}
 
 			case <-ticker.C:
@@ -46,6 +46,10 @@ func (ds *DownstreamConnection) StartAsyncClientWriter() {
 					err := writer.Flush() // Flush the buffered data to the underlying connection
 					if err != nil {
 						log.Error().Msgf("[downstream %s] Error flushing writer: %v", ds.Conn.RemoteAddr(), err)
+						if ds.Cancel != nil {
+							ds.Cancel()
+						}
+						return
 					}
 				}
 			}
@@ -66,6 +70,12 @@ func (ds *DownstreamConnection) SendToClient(ircmsg ircmsg.Message) error {
 		panic("SendToClient attempted without asyncWriter started!")
 	}
 
-	ds.msgChan <- ircmsg
+	// Serialize message
+	msgBytes, err := ircmsg.LineBytes()
+	if err != nil {
+		return err
+	}
+
+	ds.msgChan <- msgBytes
 	return nil
 }
