@@ -20,6 +20,7 @@ import (
 var supportedCaps = map[string]bool{
 	"server-time":  true,
 	"echo-message": true,
+	"multi-prefix": true,
 }
 
 func NewBouncer(upstream *ircevent.Connection) *Bouncer {
