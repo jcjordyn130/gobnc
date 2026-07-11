@@ -192,6 +192,16 @@ func main() {
 					return nil
 				},
 			},
+			{
+				Name:  "version",
+				Usage: "prints the program version",
+				Action: func(c context.Context, cmd *cli.Command) error {
+					// Override user preference to print the version
+					zerolog.SetGlobalLevel(zerolog.InfoLevel)
+					log.Info().Msgf("GoBNC version %s", GetVersion())
+					return nil
+				},
+			},
 			cmd.NewConfigCmd(db).Command(),
 			cmd.NewUserCmd(db).Command(),
 			cmd.NewDBCmd(db).Command(),
