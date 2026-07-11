@@ -9,9 +9,12 @@ import (
 )
 
 func HandleAWAY(b *core.Bouncer, ds *core.DownstreamConnection, msg ircmsg.Message) error {
-	awaymsg := msg.Params[0]
+	if len(msg.Params) > 0 {
+		log.Debug().Msgf("[downstream %s] User setting away for reason %s", ds.Conn.RemoteAddr(), msg.Params[0])
+	} else {
+		log.Debug().Msgf("[downstream %s] User unsetting away", ds.Conn.RemoteAddr())
+	}
 
-	log.Debug().Msgf("[downstream %s] User setting away for reason %s", ds.Conn.RemoteAddr(), awaymsg)
 	b.GetUpstreamConn().SendIRCMessage(msg)
 	return nil
 }
