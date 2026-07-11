@@ -2,6 +2,7 @@ package core
 
 import (
 	"bouncer/database"
+	"bouncer/models"
 	"context"
 	"net"
 	"sync"
@@ -22,12 +23,16 @@ type Bouncer struct {
 	routes                map[string]DownstreamCommandHandler
 
 	// Holds a mapping of channel names to state structures
-	Channels map[string]*ChannelState
+	Channels map[string]*models.ChannelState
+
+	// Holds a mapping of nicknames to state structures
+	Users map[string]*models.UserState
 
 	// Protects critical data structures
 	mu      sync.RWMutex // Protects the Channels map
 	ds_mu   sync.RWMutex // Protects the DownstreamConnections
 	motd_mu sync.RWMutex // Protects the motdCache
+	user_mu sync.RWMutex // Protects the Users map
 
 	// Fake server name to use when broadcasting to downstream clients
 	ServerName string
@@ -56,16 +61,4 @@ type DownstreamConnection struct {
 
 	// internal channel to use for messages
 	msgChan chan ircmsg.Message
-}
-
-type ChannelState struct {
-	Name  string
-	Topic string
-	// Key: Nickname (e.g. "Alice"), Value: Prefix (e.g. "@", "+", or "")
-	Users map[string]string
-	Modes string
-
-	// This is *technically* a UNIX timestamp but it's getting formatted
-	// into a string anyways, so why bother?
-	CreationTime string
 }
