@@ -1,6 +1,8 @@
 package upstreamHandlers
 
 import (
+	"bouncer/models"
+
 	"github.com/ergochat/irc-go/ircevent"
 	"github.com/ergochat/irc-go/ircmsg"
 	"github.com/rs/zerolog/log"
@@ -26,6 +28,7 @@ type Router interface {
 	CacheMOTD(msg ircmsg.Message)
 	JoinAutoJoinChannels() error
 	RemoveUserFromAllChannels(nick string)
+	ModifyUser(nick string, modifier func(user *models.UserState))
 }
 
 type UpstreamCommandHandler func(b Router, msg ircmsg.Message) error

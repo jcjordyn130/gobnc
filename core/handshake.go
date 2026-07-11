@@ -6,6 +6,7 @@
 package core
 
 import (
+	"bouncer/models"
 	"fmt"
 	"maps"
 	"strings"
@@ -255,29 +256,31 @@ func (b *Bouncer) sendOpenQueries(ds *DownstreamConnection) {
 	}
 }
 
-func (b *Bouncer) sendNamesList(ds *DownstreamConnection, chState *ChannelState) {
-	// b.mu lock is needed if the caller does NOT clone the channels map.
-
+func (b *Bouncer) sendNamesList(ds *DownstreamConnection, chState *models.ChannelState) {
 	log.Debug().Msgf("[downstream %s] Sending /NAMES for %s", ds.Conn.RemoteAddr(), chState.Name)
 
-	// 3. The Names List (353) - Chunked for Massive Channels
+	// 1. Gather all users for this specific channel from the global state
+	var allNames []string
 
-	// Pre-allocate the exact capacity needed to avoid costly slice resizing
-	allNames := make([]string, 0, len(chState.Users))
-	for nick, userPrefix := range chState.Users {
-		allNames = append(allNames, userPrefix+nick)
+	b.user_mu.RLock()
+	for nick, userState := range b.Users {
+		// Check if the user's global state shows they are in this channel
+		if prefix, inChan := userState.ChanPrefixes[chState.Name]; inChan {
+			allNames = append(allNames, prefix+nick)
+		}
 	}
+	b.user_mu.RUnlock()
 
 	// The safe IRC line limit is 512 bytes, although most servers can go over that (ex. Libera)
 	// We use 400 as a safe threshold to leave plenty of room for the
 	// ":server 353 nick = #channel :" boilerplate formatting.
 	const maxPayloadLen = 400
 
-	// Curren
+	// Current chunk tracking
 	var currentChunk []string
 	currentLen := 0
 
-	// Start processing names
+	// 2. Start processing names into safe 400-byte chunks
 	for _, name := range allNames {
 		// Flush chunk when it gets too big
 		// +1 accounts for the space character used in strings.Join
@@ -296,7 +299,7 @@ func (b *Bouncer) sendNamesList(ds *DownstreamConnection, chState *ChannelState)
 		currentLen += len(name) + 1
 	}
 
-	// Flush any remaining names in the final chunk
+	// 3. Flush any remaining names in the final chunk
 	if len(currentChunk) > 0 {
 		namesStr := strings.Join(currentChunk, " ")
 		namesMsg := ircmsg.MakeMessage(nil, b.ServerName, "353", ds.Nick, "=", chState.Name, namesStr)

@@ -5,6 +5,8 @@ package core
 
 import (
 	"bouncer/database"
+	"bouncer/models"
+
 	"fmt"
 	"strings"
 	"time"
@@ -24,7 +26,8 @@ func NewBouncer(upstream *ircevent.Connection) *Bouncer {
 	return &Bouncer{
 		upstreamConn: upstream,
 		routes:       make(map[string]DownstreamCommandHandler),
-		Channels:     make(map[string]*ChannelState),
+		Channels:     make(map[string]*models.ChannelState),
+		Users:        make(map[string]*models.UserState),
 		ServerName:   "bnc.jordynsblog.org",
 	}
 }
@@ -192,26 +195,41 @@ func (b *Bouncer) ChangeDownstreamNick(newnick string) {
 }
 
 func (b *Bouncer) AddChannelUsers(channel string, users []string) {
+	// Create channel state if this is a new channel
+	// This is bare now because it is filled in by the mode and topic
 	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	// Ensure the channel exists in our map
-	// TODO: cleaner syntax
 	if _, exists := b.Channels[channel]; !exists {
-		b.Channels[channel] = &ChannelState{
-			Name:  channel,
-			Users: make(map[string]string),
+		b.Channels[channel] = &models.ChannelState{
+			Name: channel,
 		}
 	}
+	b.mu.Unlock()
 
-	ch := b.Channels[channel]
+	b.user_mu.Lock()
+	defer b.user_mu.Unlock()
+
+	// Add user state
 	for _, rawUser := range users {
+		// Check for bugs
 		if rawUser == "" {
+			BUG(fmt.Sprintf("[upstream %s] AddChannelUsers called with blank user string in array!", b.GetUpstreamConn().Server))
 			continue
 		}
 
 		nick, prefix := parsePrefix(rawUser)
-		ch.Users[nick] = prefix
+		log.Trace().Str("nick", nick).Str("prefix", prefix).Str("upstream", b.GetUpstreamConn().Server).Str("channel", channel).Msg("Adding prefixes")
+		// Get or create state for user
+		user, exists := b.Users[nick]
+		if !exists {
+			user = &models.UserState{
+				Nickname:     nick,
+				ChanPrefixes: make(map[string]string),
+			}
+
+			b.Users[nick] = user
+		}
+
+		user.ChanPrefixes[channel] = prefix
 	}
 }
 
@@ -278,15 +296,25 @@ func (b *Bouncer) SendDownstreamJoin(ds *DownstreamConnection, channel string) {
 	b.SendHistory(&channel, ds)
 }
 
-func (b *Bouncer) RemoveUserFromChannel(channel string, user string) {
-	// Get channel state
-	channelS := b.Channels[channel]
-	if channelS == nil {
+func (b *Bouncer) RemoveUserFromChannel(channel string, nick string) {
+	b.user_mu.Lock()
+	defer b.user_mu.Unlock()
+
+	user, exists := b.Users[nick]
+	if !exists {
+		log.Debug().Str("channel", channel).Str("nick", nick).Str("upstream", b.GetUpstreamConn().Server).Msg("Attempted removal on non-existent user")
 		return
 	}
 
-	// Remove user
-	delete(channelS.Users, user)
+	// Remove the channel from their prefixes
+	delete(user.ChanPrefixes, channel)
+
+	// Memory Cleanup: If they are no longer in ANY channels with the bouncer,
+	// delete them from the global map.
+	if len(user.ChanPrefixes) == 0 {
+		log.Debug().Str("channel", channel).Str("nick", nick).Str("upstream", b.GetUpstreamConn().Server).Msg("Removing UserState for user we no longer share any channels with")
+		delete(b.Users, nick)
+	}
 }
 
 func (b *Bouncer) DisconnectDownstreamConnection(ds *DownstreamConnection, reason string) {
@@ -350,57 +378,40 @@ func (b *Bouncer) DisconnectDownstreamConnection(ds *DownstreamConnection, reaso
 
 // ApplyModes updates the internal user prefix map based on incoming MODE changes
 func (b *Bouncer) ApplyModes(channel string, modeStr string, args []string) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	// Check to make sure the channel *exists* first
-	ch, exists := b.Channels[channel]
-	if !exists {
-		return
-	}
+	b.user_mu.Lock()
+	defer b.user_mu.Unlock()
 
 	adding := true
 	argIndex := 0
 
 	for _, char := range modeStr {
 		switch char {
-		// Process add/remove
 		case '+':
 			adding = true
 		case '-':
 			adding = false
-
-		// Process actual mode char
 		case 'o', 'v', 'h', 'a', 'q':
-			// These modes take an argument (the target user's nick)
 			if argIndex >= len(args) {
-				continue // Malformed command from server
+				continue
 			}
-
 			targetNick := args[argIndex]
 			argIndex++
 
-			// Update the user's prefix in our state
+			user, exists := b.Users[targetNick]
+			if !exists {
+				continue // User isn't in our global state
+			}
+
 			prefix := modeToPrefix(char)
-			curPrefix := ch.Users[targetNick]
+			curPrefix := user.ChanPrefixes[channel]
 
 			if adding {
-				// Note: A real IRC server can have multiple prefixes (e.g., +@).
-				// For a basic bouncer, just storing the highest privilege is usually enough.
 				curPrefix = curPrefix + prefix
 			} else {
-				// If removing a privilege, we revert them to a standard user
 				curPrefix = strings.ReplaceAll(curPrefix, prefix, "")
 			}
 
-			ch.Users[targetNick] = curPrefix
-
-			log.Debug().Msgf("[State] Channel %s | User %s | New Mode: %s", channel, targetNick, curPrefix)
-
-		default:
-			// Other channel modes like +k (password), +l (limit), +t (topic lock).
-			// You can implement state tracking for these later if you want to replay
-			// them on client connect, but passing them through live is usually enough.
+			user.ChanPrefixes[channel] = curPrefix
 		}
 	}
 }
@@ -505,14 +516,30 @@ func (b *Bouncer) Shutdown() {
 }
 
 func (b *Bouncer) RemoveUserFromAllChannels(nick string) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
+	b.user_mu.Lock()
+	defer b.user_mu.Unlock()
 
-	for _, ch := range b.Channels {
-		if _, exists := ch.Users[nick]; exists {
-			// delete() is safe even if nick doesn't exist in the Users map
-			delete(ch.Users, nick)
-			log.Debug().Msgf("[bouncer] Removed user %s from channel %s", nick, ch.Name)
+	log.Debug().Msgf("[bouncer] Removed UserState for %s", nick)
+	delete(b.Users, nick)
+}
+
+// ModifyUser safely fetches or creates a user, then applies custom modifications
+// inside a thread-safe lock.
+func (b *Bouncer) ModifyUser(nick string, modifier func(user *models.UserState)) {
+	b.user_mu.Lock()
+	defer b.user_mu.Unlock()
+
+	// Fetch existing user, or initialize a new one if they don't exist
+	user, exists := b.Users[nick]
+	if !exists {
+		log.Debug().Msgf("[upstream %s] Creating new UserState for %s", b.GetUpstreamConn().Server, nick)
+		user = &models.UserState{
+			Nickname:     nick,
+			ChanPrefixes: make(map[string]string),
 		}
+		b.Users[nick] = user
 	}
+
+	// Execute the caller's custom logic directly on the struct pointer
+	modifier(user)
 }
