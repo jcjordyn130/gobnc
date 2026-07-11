@@ -10,7 +10,6 @@ on:
     branches: [ "*" ]
 
 jobs:
-
   build:
     runs-on: ubuntu-latest
     steps:
@@ -31,5 +30,28 @@ jobs:
     - name: Deploy
       uses: actions/upload-artifact@v4
       with:
-        name: GoBNC-${{ github.sha }}
+        name: GoBNC_Linux
         path: ./bouncer
+
+  WinBuild:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: 'stable'
+        check-latest: true
+        
+    - name: Build
+      run: go build -o ./bouncer.exe -v .
+
+    - name: Test
+      run: go test -v ./...
+
+    - name: Deploy
+      uses: actions/upload-artifact@v4
+      with:
+        name: GoBNC_Windows
+        path: ./bouncer.exe
