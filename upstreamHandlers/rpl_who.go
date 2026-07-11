@@ -42,6 +42,10 @@ func Handle352(b Router, msg ircmsg.Message) error {
 		u.Realname = realname
 		u.Away = isAway
 		u.IRCOp = isIRCOp
+
+		if !isAway {
+			u.AwayMessage = ""
+		}
 	})
 
 	b.BroadcastToClients(msg)
