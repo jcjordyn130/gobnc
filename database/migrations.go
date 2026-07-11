@@ -75,4 +75,16 @@ var registeredMigrations = []Migration{
 			);
 			`,
 	},
+	{
+		Version: 5,
+		Name:    "add_db_indexes",
+		UpSQL: `
+			CREATE INDEX idx_history_target_time ON history(target, timestamp DESC);
+			CREATE INDEX idx_identities_owner ON identities(owner);
+			CREATE INDEX idx_servers_user ON servers(user);
+			CREATE INDEX idx_servers_identity ON servers(identity);
+			CREATE INDEX idx_users_defaultidentity ON users(defaultidentity);
+			CREATE INDEX idx_history_source_time ON history(source, timestamp DESC);
+			`,
+	},
 }
