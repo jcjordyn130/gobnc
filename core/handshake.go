@@ -17,118 +17,48 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-func (b *Bouncer) handleHandshake(reader ircreader.Reader, ds *DownstreamConnection) error {
-	log.Debug().Msgf("[downstream %s] Starting capability negoiation!", ds.Conn.RemoteAddr())
-	capNegActive := true
+// This is a basic reader loop for a handshake as it was easier to do this
+// than to implement handshake handling in the main loop.
+func (b *Bouncer) newHandshake(reader ircreader.Reader, ds *DownstreamConnection) error {
+	log.Debug().Msgf("[downstream %s] Starting handshake!", ds.Conn.RemoteAddr())
 
 	for {
-		// read raw line from handshake
+		// read raw line
 		rawLine, err := reader.ReadLine()
 		if err != nil {
-			log.Debug().Msgf("[downstream %s] handshake error: %v", ds.Conn.RemoteAddr(), err)
+			log.Error().Msgf("[downstream %s] handshake error: %v", ds.Conn.RemoteAddr(), err)
 			return err
 		}
 
-		// parse line
-		line := string(rawLine)
-		msg, err := ircmsg.ParseLine(line)
+		// Parse it
+		line, err := ircmsg.ParseLine(string(rawLine))
 		if err != nil {
-			log.Debug().Msgf("[downstream %s] handshake error: %v", ds.Conn.RemoteAddr(), err)
+			log.Error().Msgf("[downstream %s] handshake error: %v", ds.Conn.RemoteAddr(), err)
 			return err
 		}
 
-		log.Debug().Msgf("[downstream %s] %+v", ds.Conn.RemoteAddr(), msg)
-
-		switch msg.Command {
-		case "CAP":
-			// Check for malformed CAP
-			if len(msg.Params) == 0 {
-				log.Debug().Msgf("[downstream %s] zero-length CAP received???", ds.Conn.RemoteAddr())
-				continue
-			}
-
-			subCommand := msg.Params[0]
-
-			if subCommand == "LS" {
-				log.Debug().Msgf("[downstream %s] client is asking for cap list", ds.Conn.RemoteAddr())
-				capNegActive = true
-
-				// 2. Extract the keys from the map
-				var availableCaps []string
-				for capName, isSupported := range supportedCaps {
-					if isSupported {
-						availableCaps = append(availableCaps, capName)
-					}
-				}
-
-				// 3. Join them into a space-separated string
-				lsString := strings.Join(availableCaps, " ")
-
-				capMsg := ircmsg.MakeMessage(nil, b.ServerName, "CAP", "*", "LS", lsString)
-				log.Debug().Msgf("[downstream %s] Sending CAP LS: %s", ds.Conn.RemoteAddr(), lsString)
-				ds.SendToClient(capMsg)
-			} else if subCommand == "REQ" && len(msg.Params) > 1 {
-				requestedCaps := msg.Params[1]
-
-				var ackedCaps []string // Asked for and we support
-				var nakedCaps []string // Asked for and we do NOT support
-
-				// Parse everything the client asked for
-				for requestedCap := range strings.SplitSeq(requestedCaps, " ") {
-					capName := strings.TrimSpace(requestedCap)
-					if capName == "" {
-						continue
-					}
-
-					// Check if our bouncer actually supports it
-					if supportedCaps[capName] {
-						log.Debug().Msgf("[downstream %s] ACKing capability: %s", ds.Conn.RemoteAddr(), capName)
-						ds.Caps[capName] = true
-						ackedCaps = append(ackedCaps, capName)
-					} else {
-						log.Debug().Msgf("[downstream %s] Rejecting unknown capability: %s", ds.Conn.RemoteAddr(), capName)
-						nakedCaps = append(nakedCaps, capName)
-					}
-				}
-
-				// IRCv3 protocol technically *supports* one at a time, but it suggests batch
-				// Batch send the ACKs
-				if len(ackedCaps) > 0 {
-					ackStr := strings.Join(ackedCaps, " ")
-					capMsg := ircmsg.MakeMessage(nil, b.ServerName, "CAP", "*", "ACK", ackStr)
-					ds.SendToClient(capMsg)
-				}
-
-				// Batch send the NAKs (declined capabilities)
-				if len(nakedCaps) > 0 {
-					nakStr := strings.Join(nakedCaps, " ")
-					capMsg := ircmsg.MakeMessage(nil, b.ServerName, "CAP", "*", "NAK", nakStr)
-					ds.SendToClient(capMsg)
-				}
-			} else if subCommand == "END" {
-				log.Debug().Msgf("[downstream %s] cap negotiation end", ds.Conn.RemoteAddr())
-				capNegActive = false
-			}
-
-		case "NICK":
-			if len(msg.Params) > 0 {
-				log.Debug().Msgf("[downstream %s] setting nickname to %s", ds.Conn.RemoteAddr(), msg.Params[0])
-				ds.Nick = msg.Params[0]
-			}
-
-		case "USER":
-			if len(msg.Params) >= 4 {
-				// TODO: maybe we should store the username and realname somewhere? idk
-				log.Debug().Msgf("[downstream %s] received USER command %s", ds.Conn.RemoteAddr(), msg.Params[0])
-			}
+		// Handle it
+		err = b.handleHandshakeLine(line, ds)
+		if err != nil {
+			log.Error().Msgf("[downstream %s] handshake error: %v", ds.Conn.RemoteAddr(), err)
+			return err
 		}
 
-		// 2. The Golden Rule Exit Check
-		// This must live OUTSIDE the switch so it can safely break the FOR loop.
-		if ds.Nick != "" && !capNegActive {
-			break
+		// Return if we're done
+		if !ds.HandshakeInProgress && ds.HandshakeComplete {
+			err := b.sendWelcome(ds)
+			if err != nil {
+				return err
+			}
+
+			log.Debug().Msgf("[downstream %s] handshake complete, returning to main client loop", ds.Conn.RemoteAddr())
+			return nil
 		}
 	}
+}
+
+func (b *Bouncer) sendWelcome(ds *DownstreamConnection) error {
+	log.Debug().Msgf("[downstream %s] Sending welcome burst (RPL_001, MOTD, and backlog)", ds.Conn.RemoteAddr())
 
 	// Send RPL_001 WELCOME
 	if b.upstreamConn.Connected() {
@@ -142,21 +72,8 @@ func (b *Bouncer) handleHandshake(reader ircreader.Reader, ds *DownstreamConnect
 		ds.SendToClient(rplWelcome)
 	}
 
-	// Set connection state to handshake complete
-	ds.HandshakeComplete = true
-
 	// Send MOTD
 	b.SendCachedMOTD(ds)
-
-	// Send current upstream nick
-	// Not *technically* needed but some older clients don't listen to 001
-	// and it makes the handshake code cleaner
-	//if b.upstreamConn.Connected() {
-	//	log.Debug().Msgf("[downstream %s] Changing nick from client given %s to upstream %s", ds.Conn.RemoteAddr(), ds.Nick, b.upstreamConn.CurrentNick())
-	//	b.ChangeDownstreamNick(b.upstreamConn.CurrentNick())
-	//} else {
-	//	log.Debug().Msgf("[downstream %s] Not sending upstream nick as we aren't connected!", ds.Conn.RemoteAddr())
-	//}
 
 	// Send channel joins
 	go b.sendJoinedChannels(ds)
@@ -164,7 +81,139 @@ func (b *Bouncer) handleHandshake(reader ircreader.Reader, ds *DownstreamConnect
 	// Send open queries
 	go b.sendOpenQueries(ds)
 
-	log.Debug().Msgf("[downstream %s] returning to main client loop", ds.Conn.RemoteAddr())
+	return nil
+}
+
+func (b *Bouncer) handleHandshakeLine(line ircmsg.Message, ds *DownstreamConnection) error {
+	log.Debug().Msgf("[downstream %s] Handling line from handshake: %+v", ds.Conn.RemoteAddr(), line)
+
+	switch line.Command {
+	case "CAP":
+		err := b.handleHandshakeCAP(line, ds)
+		if err != nil {
+			return err
+		}
+	case "NICK":
+		// This denotes start of handshake UNLESS caps are in use, which if they are then
+		// CAP *should* be the first command sent so this would be true anyways.
+		ds.HandshakeInProgress = true
+
+		if len(line.Params) > 0 {
+			log.Debug().Msgf("[downstream %s] setting nickname to %s", ds.Conn.RemoteAddr(), line.Params[0])
+			ds.Nick = line.Params[0]
+		}
+
+	case "USER":
+		if len(line.Params) >= 4 {
+			// TODO: maybe we should store the username and realname somewhere? idk
+			log.Debug().Msgf("[downstream %s] received USER command %s", ds.Conn.RemoteAddr(), line.Params[0])
+
+			// This *officially* denotes end of handshake IF caps aren't used
+			// This variable is only set IF CAP {LS, REQ} is sent
+			if !ds.HandshakeInProgress {
+				ds.HandshakeInProgress = false
+				ds.HandshakeComplete = true
+			}
+		}
+
+	default:
+		// To free up precious OS resources, assume any line that isn't handled above is malicious.
+		log.Warn().Msgf("[downstream %s] Invalid message received during handshake, DISCONNECTING", ds.Conn.RemoteAddr())
+		return fmt.Errorf("invalid handshake")
+	}
+
+	return nil
+}
+
+func (b *Bouncer) handleHandshakeCAP(line ircmsg.Message, ds *DownstreamConnection) error {
+	log.Debug().Msgf("[downstream %s] Handling CAP command", ds.Conn.RemoteAddr())
+
+	// Technically an error but not worth one passing back up the stack and killing the handshake.
+	if len(line.Params) < 1 {
+		log.Warn().Msgf("[downstream %s] CAP params < 1, invalid!", ds.Conn.RemoteAddr())
+		return nil
+	}
+
+	subCmd := line.Params[0]
+	if subCmd == "LS" {
+		// Client is starting capability negotiation
+		ds.HandshakeInProgress = true
+
+		// Get supported version (if any)
+		// TODO: actually use this and implement support for version extentions
+		if len(line.Params) == 2 {
+			ds.CapVersionSupported = line.Params[1]
+		}
+
+		log.Debug().Msgf("[downstream %s] client is asking for cap list", ds.Conn.RemoteAddr())
+
+		if ds.CapVersionSupported != "" {
+			log.Debug().Msgf("[downstream %s] client supports CAP version %s", ds.Conn.RemoteAddr(), ds.CapVersionSupported)
+		}
+
+		// 2. Extract the keys from the map
+		var availableCaps []string
+		for capName, isSupported := range supportedCaps {
+			if isSupported {
+				availableCaps = append(availableCaps, capName)
+			}
+		}
+
+		// 3. Join them into a space-separated string
+		lsString := strings.Join(availableCaps, " ")
+
+		capMsg := ircmsg.MakeMessage(nil, b.ServerName, "CAP", "*", "LS", lsString)
+		log.Debug().Msgf("[downstream %s] Sending CAP LS: %s", ds.Conn.RemoteAddr(), lsString)
+		ds.SendToClient(capMsg)
+	} else if subCmd == "REQ" {
+		// Client is starting capability negotiation
+		ds.HandshakeInProgress = true
+
+		requestedCaps := line.Params[1]
+
+		var ackedCaps []string // Asked for and we support
+		var nakedCaps []string // Asked for and we do NOT support
+
+		// Parse everything the client asked for
+		for requestedCap := range strings.SplitSeq(requestedCaps, " ") {
+			capName := strings.TrimSpace(requestedCap)
+			if capName == "" {
+				continue
+			}
+
+			// Check if our bouncer actually supports it
+			if supportedCaps[capName] {
+				log.Debug().Msgf("[downstream %s] ACKing capability: %s", ds.Conn.RemoteAddr(), capName)
+				ds.Caps[capName] = true
+				ackedCaps = append(ackedCaps, capName)
+			} else {
+				log.Debug().Msgf("[downstream %s] Rejecting unknown capability: %s", ds.Conn.RemoteAddr(), capName)
+				nakedCaps = append(nakedCaps, capName)
+			}
+		}
+
+		// IRCv3 protocol technically *supports* one at a time, but it suggests batch
+		// Batch send the ACKs
+		if len(ackedCaps) > 0 {
+			ackStr := strings.Join(ackedCaps, " ")
+			capMsg := ircmsg.MakeMessage(nil, b.ServerName, "CAP", "*", "ACK", ackStr)
+			ds.SendToClient(capMsg)
+		}
+
+		// Batch send the NAKs (declined capabilities)
+		if len(nakedCaps) > 0 {
+			nakStr := strings.Join(nakedCaps, " ")
+			capMsg := ircmsg.MakeMessage(nil, b.ServerName, "CAP", "*", "NAK", nakStr)
+			ds.SendToClient(capMsg)
+		}
+	} else if subCmd == "END" {
+		log.Debug().Msgf("[downstream %s] cap negotiation end", ds.Conn.RemoteAddr())
+
+		// If CAP {LS, REQ} is sent, then handshake does NOT end until CAP END is sent.
+		ds.HandshakeInProgress = false
+		ds.HandshakeComplete = true
+	}
+
 	return nil
 }
 

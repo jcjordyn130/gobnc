@@ -56,8 +56,18 @@ type DownstreamConnection struct {
 	Caps map[string]bool
 
 	// Whether or not the handshake has completed (USER/NICK/CAP negotiation)
-	// This is toggled right after RPL_001 is sent to the client
+	// This is toggled after CAP END if clients support caps
+	// or USER if the client does NOT support caps
 	HandshakeComplete bool
+
+	// This is set when we get CAP {LS, REQ} and unset when we get CAP END
+	// If the client does NOT support caps then it is NICK and USER
+	//
+	// This is purly used to control the handshake loop.
+	HandshakeInProgress bool
+
+	// CAP version supported
+	CapVersionSupported string
 
 	// internal channel to use for messages
 	//msgChan chan ircmsg.Message

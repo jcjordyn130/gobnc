@@ -22,7 +22,12 @@ func (ds *DownstreamConnection) Init(b *Bouncer) {
 	ds.StartAsyncClientWriter()
 
 	// Start handshake
-	b.handleHandshake(*clientReader, ds)
+	err := b.newHandshake(*clientReader, ds)
+	if err != nil {
+		// Remove broken connection
+		b.DisconnectDownstreamConnection(ds, "broken handshake")
+		return
+	}
 
 	// If we aren't connected to the upstream server, let the client know!
 	if b.GetUpstreamConn() == nil {
