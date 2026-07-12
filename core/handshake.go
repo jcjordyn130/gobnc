@@ -62,9 +62,9 @@ func (b *Bouncer) sendWelcome(ds *DownstreamConnection) error {
 
 	// Send RPL_001 WELCOME
 	if b.upstreamConn.Connected() {
-		log.Debug().Msgf("[downstream %s] sending upstream nick %s to client", ds.Conn.RemoteAddr(), b.upstreamConn.CurrentNick())
-		rplWelcome := ircmsg.MakeMessage(nil, b.ServerName, "001", b.upstreamConn.CurrentNick(), "Welcome to the Golang BNC!")
-		ds.Nick = b.upstreamConn.CurrentNick()
+		log.Debug().Msgf("[downstream %s] sending upstream nick %s to client", ds.Conn.RemoteAddr(), b.GetUpstreamConn().CurrentNick())
+		rplWelcome := ircmsg.MakeMessage(nil, b.ServerName, "001", b.GetUpstreamConn().CurrentNick(), "Welcome to the Golang BNC!")
+		ds.Nick = b.GetUpstreamConn().CurrentNick()
 		ds.SendToClient(rplWelcome)
 	} else {
 		log.Debug().Msgf("[downstream %s] sending client nick %s to client due to no connection!", ds.Conn.RemoteAddr(), ds.Nick)
