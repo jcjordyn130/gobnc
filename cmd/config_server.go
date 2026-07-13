@@ -39,6 +39,7 @@ func (c *ServerCmd) newServer(ctx context.Context, cmd *cli.Command) error {
 	s.Domain = cmd.String("domain")
 	s.Port = cmd.Int("port")
 	s.Ssl = cmd.Bool("ssl")
+	s.Name = cmd.String("name")
 
 	// Commit to DB
 	err = c.db.AddServer(s)
@@ -90,6 +91,13 @@ func (c *ServerCmd) Command() *cli.Command {
 						Name:        "domain",
 						Aliases:     []string{"d"},
 						Usage:       "domain to use",
+						DefaultText: "",
+						Required:    true,
+					},
+					&cli.StringFlag{
+						Name:        "name",
+						Aliases:     []string{"n"},
+						Usage:       "name to use",
 						DefaultText: "",
 						Required:    true,
 					},
