@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"os"
 	"os/signal"
@@ -24,21 +23,41 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-func mainConnect(ctx context.Context, db *database.DB, conf *config.Config) {
+func mainConnect(cmd *cli.Command, ctx context.Context, db *database.DB) {
+	// Grab user from database
+	user, err := db.GetUserByUsername(cmd.String("user"))
+	if err != nil {
+		panic(err)
+	}
+
+	// Grab server from database
+	serv, err := db.GetServerByNameAndUser(user.Id, cmd.String("server"))
+	if err != nil {
+		panic(err)
+	}
+
+	// Pick identity to use
+	identityId := ""
+	if serv.Identity != "" {
+		identityId = serv.Identity
+	} else if user.Defaultidentity != "" {
+		identityId = user.Defaultidentity
+	} else {
+		panic("database corruption, server identity is null AND no default identity exists for user")
+	}
+
+	identity, err := db.GetIdentityByID(identityId)
+	if err != nil {
+		panic(err)
+	}
+
 	conn := ircevent.Connection{
-		Server: fmt.Sprintf("%s:%d", conf.UpstreamServer, conf.UpstreamPort),
-		UseTLS: conf.UseTLS,
-		Nick:   conf.Nick,
-		Debug:  conf.VerboseUpstream,
-	}
-
-	if conf.IgnoreCerts {
-		log.Debug().Msg("[main] Ignoring TLS errors due to config...")
-		conn.TLSConfig = &tls.Config{InsecureSkipVerify: true}
-	}
-
-	if conf.UpstreamPassword != "" {
-		conn.Password = conf.UpstreamPassword
+		Server:   fmt.Sprintf("%s:%d", serv.Domain, serv.Port),
+		UseTLS:   serv.Ssl,
+		Nick:     identity.Nickname,
+		User:     identity.Username,
+		RealName: identity.Nickname,
+		Debug:    true,
 	}
 
 	// Init bouncer
@@ -60,10 +79,11 @@ func mainConnect(ctx context.Context, db *database.DB, conf *config.Config) {
 	b.Register("AWAY", downstreamHandlers.HandleAWAY)
 
 	// Start FIFO handler
-	go listenFIFO(b, conf.FIFOName)
+	// TODO: store in DB and fetch
+	go listenFIFO(b, "")
 
 	// Connect to upstream server
-	err := b.ConnectToServer(&conn)
+	err = b.ConnectToServer(&conn)
 	if err != nil {
 		panic("failed to connect to server")
 	}
@@ -78,7 +98,7 @@ func mainConnect(ctx context.Context, db *database.DB, conf *config.Config) {
 	log.Info().Msg("Gracefully shutting down... This may take up to 30 seconds.")
 
 	// Create time based context for shutdown
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Duration(conf.GracefulShutdownTimeout)*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Duration(5)*time.Second)
 	defer cancel()
 
 	// Create a channel to listen for the shutdown signal
@@ -187,8 +207,22 @@ func main() {
 			{
 				Name:  "connect",
 				Usage: "connect to the upstream server and start the bouncer",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:     "server",
+						Aliases:  []string{"s"},
+						Usage:    "server to use",
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name:     "user",
+						Aliases:  []string{"u"},
+						Usage:    "user to use",
+						Required: true,
+					},
+				},
 				Action: func(c context.Context, cmd *cli.Command) error {
-					mainConnect(c, db, conf)
+					mainConnect(cmd, c, db)
 					return nil
 				},
 			},
