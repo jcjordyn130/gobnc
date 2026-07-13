@@ -30,15 +30,15 @@ type Router interface {
 	ModifyUser(nick string, modifier func(user *models.UserState))
 }
 
-type UpstreamCommandHandler func(b Router, us *ircevent.UpstreamConnection, msg ircmsg.Message) error
+type UpstreamCommandHandler func(b Router, msg ircmsg.Message) (bool, error)
 
 // Register attaches all your upstream callbacks to a new connection.
 // It accepts the interface, NOT the core.Bouncer struct.
 func Register(b Router, cmd string, callback UpstreamCommandHandler) {
 	upstream := b.GetUpstreamConn()
 
-	upstream.RegisterCallback(cmd, func(us *ircevent.UpstreamConnection, e ircmsg.Message) (bool, error) {
-		callback(b, us, e)
+	upstream.RegisterCallback(cmd, func(e ircmsg.Message) (bool, error) {
+		callback(b, e)
 		return true, nil
 	})
 }

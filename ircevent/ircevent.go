@@ -9,7 +9,8 @@ import (
 
 func NewConnection(ctx context.Context, config upstreamConfig) *UpstreamConnection {
 	us := UpstreamConnection{
-		Config: config,
+		Config:    config,
+		connected: false,
 	}
 
 	if us.Config.Server == "" || us.Config.Port == "" {
@@ -28,6 +29,12 @@ func NewConnection(ctx context.Context, config upstreamConfig) *UpstreamConnecti
 
 	// Init callback mapping
 	us.callbacks = make(map[string][]UpstreamCommandHandler)
+
+	// Init negotiated cap list
+	us.CurrentCaps = make([]string, 0)
+
+	// Register internal callbacks
+	//us.RegisterCallback("CAP", handleCAP)
 
 	return &us
 }

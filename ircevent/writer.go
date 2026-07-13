@@ -1,7 +1,6 @@
 package ircevent
 
 import (
-	"bufio"
 	"time"
 
 	"github.com/ergochat/irc-go/ircmsg"
@@ -9,7 +8,6 @@ import (
 )
 
 func (us *UpstreamConnection) writeLoop() {
-	writer := bufio.NewWriter(us.conn)
 	ticker := time.NewTicker(time.Duration(us.Config.WriterLoopTimeout) * time.Millisecond)
 
 	go func() {
@@ -21,7 +19,7 @@ func (us *UpstreamConnection) writeLoop() {
 			case msg, ok := <-us.msgChan:
 				if !ok {
 					us.logger.Debug().Msgf("Exiting AsyncClientWriter loop due to !ok on channel")
-					writer.Flush()
+					us.writer.Flush()
 					return
 				}
 
@@ -33,7 +31,7 @@ func (us *UpstreamConnection) writeLoop() {
 				}
 
 				// Send message
-				_, err = writer.Write(ircmsgb)
+				_, err = us.writer.Write(ircmsgb)
 				us.logger.Debug().Msgf("[ASYNC] Sending message: %+v", msg)
 				if err != nil {
 					log.Error().Msgf("FATAL Error sending response: %v", err)
@@ -45,9 +43,9 @@ func (us *UpstreamConnection) writeLoop() {
 
 			case <-ticker.C:
 				// Periodically check if there is un-flushed data sitting in the buffer.
-				if writer.Buffered() > 0 {
+				if us.writer.Buffered() > 0 {
 					us.logger.Debug().Msgf("Flushing buffered data to client")
-					err := writer.Flush() // Flush the buffered data to the underlying connection
+					err := us.writer.Flush() // Flush the buffered data to the underlying connection
 					if err != nil {
 						us.logger.Error().Msgf("Error flushing writer: %v", err)
 						if us.Cancel != nil {
@@ -64,4 +62,34 @@ func (us *UpstreamConnection) writeLoop() {
 func (us *UpstreamConnection) WriteMsg(msg ircmsg.Message) {
 	us.logger.Trace().Msgf("Writing message %+v", msg)
 	us.msgChan <- msg
+}
+
+func (us *UpstreamConnection) WriteMsgNoQ(msg ircmsg.Message) {
+	// WARN: unsafe to use concurrently
+	us.logger.Trace().Msgf("Writing message (NO QUEUE) %+v", msg)
+
+	// Decode message
+	ircmsgb, err := msg.LineBytes()
+	if err != nil {
+		us.logger.Error().Msgf("error encoding message %+v", msg)
+		panic("failed handshake")
+	}
+
+	// Send message
+	_, err = us.writer.Write(ircmsgb)
+	us.logger.Debug().Msgf("[NOQUEUE] Sending message: %+v", msg)
+	if err != nil {
+		log.Error().Msgf("FATAL Error sending response: %v", err)
+		if us.Cancel != nil {
+			us.Cancel()
+		}
+		return
+	}
+}
+
+// Capability HACK
+// TODO: refactor
+func (us *UpstreamConnection) SendIRCMessage(msg ircmsg.Message) error {
+	us.WriteMsg(msg)
+	return nil
 }

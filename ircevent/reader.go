@@ -10,12 +10,9 @@ import (
 )
 
 func (us *UpstreamConnection) readLoop() {
-	// Create reader
-	clientReader := ircreader.NewIRCReader(us.conn)
-
 	for {
 		// Read raw bytes encoded line from client
-		rawLine, err := clientReader.ReadLine()
+		rawLine, err := us.reader.ReadLine()
 		if err != nil {
 			// Handle graceful EOF
 			if err == io.EOF {
@@ -57,6 +54,10 @@ func (us *UpstreamConnection) readLoop() {
 		us.logger.Debug().Msgf("%+v", msg)
 
 		// Handle callbacks
-		go us.handleCallback(msg)
+		if !us.connected {
+			us.handleHandshake(msg)
+		} else {
+			go us.handleCallback(msg)
+		}
 	}
 }

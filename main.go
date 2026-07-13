@@ -22,7 +22,7 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-func oldmainConnect(ctx context.Context, db *database.DB, conf *config.Config) {
+func mainConnect(ctx context.Context, db *database.DB, conf *config.Config) {
 	// Create config
 	usConf := ircevent.NewConfig()
 	usConf.Server = conf.UpstreamServer
@@ -46,12 +46,12 @@ func oldmainConnect(ctx context.Context, db *database.DB, conf *config.Config) {
 
 	// Register downstream handlers
 	// These are commands sent by clients connected to us
-	b.Register("PING", handlers.HandlePING)
-	b.Register("PRIVMSG", handlers.HandlePRIVMSG)
-	b.Register("WHO", handlers.HandleWHO)
-	b.Register("USERHOST", handlers.HandleUSERHOST)
-	b.Register("NICK", handlers.HandleNICK)
-	b.Register("JOIN", handlers.HandleJOIN)
+	b.Register("PING", downstreamHandlers.HandlePING)
+	b.Register("PRIVMSG", downstreamHandlers.HandlePRIVMSG)
+	b.Register("WHO", downstreamHandlers.HandleWHO)
+	b.Register("USERHOST", downstreamHandlers.HandleUSERHOST)
+	b.Register("NICK", downstreamHandlers.HandleNICK)
+	b.Register("JOIN", downstreamHandlers.HandleJOIN)
 	b.Register("QUIT", downstreamHandlers.HandleQUIT)
 	b.Register("PART", downstreamHandlers.HandlePART)
 	b.Register("AWAY", downstreamHandlers.HandleAWAY)
@@ -60,14 +60,13 @@ func oldmainConnect(ctx context.Context, db *database.DB, conf *config.Config) {
 	go listenFIFO(b, conf.FIFOName)
 
 	// Connect to upstream server
-	err := b.ConnectToServer(&conn)
+	err = b.ConnectToServer(usServ)
 	if err != nil {
 		panic("failed to connect to server")
 	}
 
 	// Start upstream server loop
-	log.Debug().Msg("Starting upstream server loop")
-	go conn.Loop()
+	//log.Debug().Msg("Starting upstream server loop")
 
 	// Start downstream listener
 	b.ListenDownstream(ctx, "127.0.0.1:12345")

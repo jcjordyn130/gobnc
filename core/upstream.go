@@ -16,7 +16,7 @@ func (b *Bouncer) ConnectToServer(conn *ircevent.UpstreamConnection) (err error)
 	// Map of IRC commands to their handler functions
 	// If upstreamHandlers exports a specific type (e.g., upstreamHandlers.Handler),
 	// you can replace the func signature below with that type.
-	handlers := map[string]func(ircevent.UpstreamConnection, ircmsg.Message) (bool, error){
+	handlers := map[string]func(b upstreamHandlers.Router, msg ircmsg.Message) (bool, error){
 		// Basic messaging and connection
 		"PING":    upstreamHandlers.HandlePING,
 		"PRIVMSG": upstreamHandlers.HandlePRIVMSG,

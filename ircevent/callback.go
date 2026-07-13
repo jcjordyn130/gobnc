@@ -31,7 +31,7 @@ func (us *UpstreamConnection) handleCallback(msg ircmsg.Message) {
 	// Call callback
 	for index, cb := range callbacks {
 		us.logger.Trace().Msgf("Calling callback %d for command '%s'", index, msg.Command)
-		keepGoing, err := cb(us, msg)
+		keepGoing, err := cb(msg)
 		if err != nil {
 			us.logger.Error().Msgf("error occurred in callback %d: %+v", index, err)
 			continue

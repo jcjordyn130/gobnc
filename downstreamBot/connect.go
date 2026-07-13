@@ -22,12 +22,14 @@ func handleConnect(b *core.Bouncer, ds *core.DownstreamConnection, msg ircmsg.Me
 		return nil
 	}
 
+	return nil
+
 	// Connect... again
 	//_ = b.ConnectToServer(b.UpstreamConn)
-	upstream.Reconnect()
+	//upstream.Reconnect()
 
 	// Start upstream handler loop
-	go upstream.Loop()
+	//go upstream.Loop()
 
-	return nil
+	//return nil
 }

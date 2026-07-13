@@ -24,7 +24,7 @@ func handleDisconnect(b *core.Bouncer, ds *core.DownstreamConnection, msg ircmsg
 
 	// Send QUIT message
 	// This should cause the server to close our socket
-	quitmsg := ircmsg.MakeMessage(nil, upstream.Nick, "QUIT", "brb")
+	quitmsg := ircmsg.MakeMessage(nil, upstream.CurrentNick(), "QUIT", "brb")
 	upstream.SendIRCMessage(quitmsg)
 
 	return nil
