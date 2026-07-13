@@ -87,4 +87,11 @@ var registeredMigrations = []Migration{
 			CREATE INDEX idx_history_source_time ON history(source, timestamp DESC);
 			`,
 	},
+	{
+		Version: 6,
+		Name:    "add_server_name",
+		UpSQL: `
+			ALTER TABLE servers ADD COLUMN name TEXT;
+		`,
+	},
 }
