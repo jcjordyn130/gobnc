@@ -36,14 +36,14 @@ func (d *DB) GetServerByID(id string) (*Server, error) {
 	return &s, nil
 }
 
-func (d *DB) GetServerByNameAndUser(user string, id string) (*Server, error) {
+func (d *DB) GetServerByNameAndUser(user string, name string) (*Server, error) {
 	var s Server
 
 	// sqlx's Get executes the query and unmarshals the single row into the struct.
-	err := d.conn.Get(&s, `SELECT * FROM servers WHERE id = ? AND owner = ?`, id, user)
+	err := d.conn.Get(&s, `SELECT * FROM servers WHERE id = ? AND owner = ?`, name, user)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("server '%s' not found", id)
+			return nil, fmt.Errorf("server '%s' not found for user '%s'", name, user)
 		}
 
 		// Handle any other actual database errors
