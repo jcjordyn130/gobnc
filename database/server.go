@@ -22,7 +22,7 @@ func (d *DB) GetServerByID(id string) (*Server, error) {
 	var s Server
 
 	// sqlx's Get executes the query and unmarshals the single row into the struct.
-	err := d.conn.Get(&s, `SELECT * FROM server WHERE id = ?`, id)
+	err := d.conn.Get(&s, `SELECT * FROM servers WHERE id = ?`, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("server '%s' not found", id)
