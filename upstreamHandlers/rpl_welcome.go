@@ -6,8 +6,8 @@ import (
 )
 
 // wtf?
-func Handle001(b Router, msg ircmsg.Message) error {
-	log.Debug().Msgf("[upstream %s] Received 001 (RPL_WELCOME) from upstream server", b.GetUpstreamConn().Server)
+func Handle001(b Router, msg ircmsg.Message) (bool, error) {
+	log.Debug().Msgf("[upstream %s] Received 001 (RPL_WELCOME) from upstream server", b.GetUpstreamConn().Config.Server)
 
 	// Forward message to client
 	b.BroadcastToClients(msg)
@@ -18,9 +18,9 @@ func Handle001(b Router, msg ircmsg.Message) error {
 	go func() {
 		err := b.JoinAutoJoinChannels()
 		if err != nil {
-			log.Debug().Msgf("[upstream %s] Error joining autojoin channels: %v", b.GetUpstreamConn().Server, err)
+			log.Debug().Msgf("[upstream %s] Error joining autojoin channels: %v", b.GetUpstreamConn().Config.Server, err)
 		}
 	}()
 
-	return nil
+	return true, nil
 }

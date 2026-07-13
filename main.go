@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"os"
 	"os/signal"
@@ -14,35 +13,33 @@ import (
 	"bouncer/core"
 	"bouncer/database"
 	"bouncer/downstreamHandlers"
-	handlers "bouncer/downstreamHandlers"
+	"bouncer/ircevent"
 
 	_ "net/http/pprof" // The blank identifier is required here to register the handlers
 
-	"github.com/ergochat/irc-go/ircevent"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/urfave/cli/v3"
 )
 
-func mainConnect(ctx context.Context, db *database.DB, conf *config.Config) {
-	conn := ircevent.Connection{
-		Server: fmt.Sprintf("%s:%d", conf.UpstreamServer, conf.UpstreamPort),
-		UseTLS: conf.UseTLS,
-		Nick:   conf.Nick,
-		Debug:  conf.VerboseUpstream,
-	}
+func oldmainConnect(ctx context.Context, db *database.DB, conf *config.Config) {
+	// Create config
+	usConf := ircevent.NewConfig()
+	usConf.Server = conf.UpstreamServer
+	usConf.Port = fmt.Sprint(conf.UpstreamPort)
+	log.Trace().Msgf("%+v", usConf)
 
-	if conf.IgnoreCerts {
-		log.Debug().Msg("[main] Ignoring TLS errors due to config...")
-		conn.TLSConfig = &tls.Config{InsecureSkipVerify: true}
-	}
+	// Create upstream server
+	usServ := ircevent.NewConnection(ctx, usConf)
 
-	if conf.UpstreamPassword != "" {
-		conn.Password = conf.UpstreamPassword
+	// connect
+	err := usServ.Connect()
+	if err != nil {
+		panic(err)
 	}
 
 	// Init bouncer
-	b := core.NewBouncer(&conn)
+	b := core.NewBouncer(usServ)
 
 	// Assign the DB pointer to avoid copying sync primitives (sync.WaitGroup/noCopy)
 	b.DB = db

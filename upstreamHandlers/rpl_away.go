@@ -5,15 +5,15 @@ import (
 )
 
 // RPL_306 Client Away
-func Handle306(b Router, msg ircmsg.Message) error {
+func Handle306(b Router, msg ircmsg.Message) (bool, error) {
 	// Forward message to client
 	b.BroadcastToClients(msg)
-	return nil
+	return true, nil
 }
 
 // RPL_305 Client Away Unset
-func Handle305(b Router, msg ircmsg.Message) error {
+func Handle305(b Router, msg ircmsg.Message) (bool, error) {
 	// Forward message to client
 	b.BroadcastToClients(msg)
-	return nil
+	return true, nil
 }

@@ -5,27 +5,27 @@ import (
 )
 
 // Start of MOTD
-func Handle375(b Router, msg ircmsg.Message) error {
+func Handle375(b Router, msg ircmsg.Message) (bool, error) {
 	b.ClearMOTD()
 	b.CacheMOTD(msg)
-	return nil
+	return true, nil
 }
 
 // MOTD line
-func Handle372(b Router, msg ircmsg.Message) error {
+func Handle372(b Router, msg ircmsg.Message) (bool, error) {
 	b.CacheMOTD(msg)
-	return nil
+	return true, nil
 }
 
 // End of MOTD
-func Handle376(b Router, msg ircmsg.Message) error {
+func Handle376(b Router, msg ircmsg.Message) (bool, error) {
 	b.CacheMOTD(msg)
-	return nil
+	return true, nil
 }
 
 // MOTD Missing
-func Handle422(b Router, msg ircmsg.Message) error {
+func Handle422(b Router, msg ircmsg.Message) (bool, error) {
 	b.ClearMOTD()
 	b.CacheMOTD(msg)
-	return nil
+	return true, nil
 }

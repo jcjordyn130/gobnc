@@ -89,7 +89,7 @@ func (ds *DownstreamConnection) Init(b *Bouncer) {
 		err = b.Route(ds, msg)
 		if HNFErr, ok := errors.AsType[*HandlerNotFound](err); ok && b.upstreamConn.Connected() {
 			log.Error().Msgf("[downstream %s] Passing line to upstream: %v", ds.Conn.RemoteAddr(), HNFErr)
-			b.upstreamConn.Send(string(rawLine))
+			b.upstreamConn.WriteMsg(msg)
 		} else if _, ok := errors.AsType[*DownstreamClientQuitting](err); ok {
 			log.Debug().Msgf("[downstream %s] Connection loop quitting due to clean break", ds.Conn.RemoteAddr())
 			break

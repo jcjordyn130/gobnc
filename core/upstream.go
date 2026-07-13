@@ -2,21 +2,21 @@
 package core
 
 import (
+	"bouncer/ircevent"
 	"bouncer/upstreamHandlers"
 
-	"github.com/ergochat/irc-go/ircevent"
 	"github.com/ergochat/irc-go/ircmsg"
 	"github.com/rs/zerolog/log"
 )
 
-func (b *Bouncer) ConnectToServer(conn *ircevent.Connection) (err error) {
+func (b *Bouncer) ConnectToServer(conn *ircevent.UpstreamConnection) (err error) {
 	// Store the upstream connection for later use
 	b.upstreamConn = conn
 
 	// Map of IRC commands to their handler functions
 	// If upstreamHandlers exports a specific type (e.g., upstreamHandlers.Handler),
 	// you can replace the func signature below with that type.
-	handlers := map[string]func(upstreamHandlers.Router, ircmsg.Message) error{
+	handlers := map[string]func(ircevent.UpstreamConnection, ircmsg.Message) (bool, error){
 		// Basic messaging and connection
 		"PING":    upstreamHandlers.HandlePING,
 		"PRIVMSG": upstreamHandlers.HandlePRIVMSG,

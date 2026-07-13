@@ -256,7 +256,7 @@ func (b *Bouncer) sendJoinedChannels(ds *DownstreamConnection) {
 
 func (b *Bouncer) sendOpenQueries(ds *DownstreamConnection) {
 	log.Debug().Msgf("[downstream %s] Sending open queries!", ds.Conn.RemoteAddr())
-	msgChan, errChan := b.DB.AsyncGetDirectMessages(ds.Ctx, b.upstreamConn.Nick, 99999999)
+	msgChan, errChan := b.DB.AsyncGetDirectMessages(ds.Ctx, b.upstreamConn.CurrentNick(), 99999999)
 
 	recvCount := 0
 

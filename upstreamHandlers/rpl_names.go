@@ -8,17 +8,17 @@ import (
 	"github.com/ergochat/irc-go/ircmsg"
 )
 
-func Handle353(b Router, msg ircmsg.Message) error {
+func Handle353(b Router, msg ircmsg.Message) (bool, error) {
 	// Sanity check
 	if len(msg.Params) < 3 {
-		log.Debug().Msgf("[upstream %s] Ignoring RPL 353 due to invalid paramaters", b.GetUpstreamConn().Server)
-		return nil
+		log.Debug().Msgf("[upstream %s] Ignoring RPL 353 due to invalid paramaters", b.GetUpstreamConn().Config.Server)
+		return false, nil
 	}
 
 	channel := msg.Params[2]
 	nameStr := msg.Params[3]
 
-	log.Debug().Msgf("[upstream %s] Processing NAMES list for %s", b.GetUpstreamConn().Server, channel)
+	log.Debug().Msgf("[upstream %s] Processing NAMES list for %s", b.GetUpstreamConn().Config.Server, channel)
 
 	// Splice the space-separated (per IRC standards) list of names
 	users := strings.Split(strings.TrimSpace(nameStr), " ")
@@ -27,11 +27,11 @@ func Handle353(b Router, msg ircmsg.Message) error {
 	// Forward message to client
 	b.BroadcastToClients(msg)
 
-	return nil
+	return true, nil
 }
 
-func Handle366(b Router, msg ircmsg.Message) error {
-	log.Debug().Msgf("[upstream %s] End of NAMES list for %s", b.GetUpstreamConn().Server, msg.Params[1])
+func Handle366(b Router, msg ircmsg.Message) (bool, error) {
+	log.Debug().Msgf("[upstream %s] End of NAMES list for %s", b.GetUpstreamConn().Config.Server, msg.Params[1])
 	// Forward message to client
 	b.BroadcastToClients(msg)
 
@@ -41,5 +41,5 @@ func Handle366(b Router, msg ircmsg.Message) error {
 		b.OnUpstreamJoin(channelName)
 	}
 
-	return nil
+	return true, nil
 }

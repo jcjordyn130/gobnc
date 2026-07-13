@@ -6,15 +6,15 @@ import (
 	"github.com/ergochat/irc-go/ircmsg"
 )
 
-func HandleQUIT(b Router, msg ircmsg.Message) error {
+func HandleQUIT(b Router, msg ircmsg.Message) (bool, error) {
 	// XXX: this *might* be safe, idk if the library checks for valid commands for us
 	quittingNick := msg.Nick()
-	log.Debug().Msgf("[upstream %s] Processing QUIT for user %s", b.GetUpstreamConn().Server, quittingNick)
+	log.Debug().Msgf("[upstream %s] Processing QUIT for user %s", b.GetUpstreamConn().Config.Server, quittingNick)
 
 	// If somehow we get an upsteam quit for ourselves
 	if b.GetUpstreamConn() != nil && quittingNick == b.GetUpstreamConn().CurrentNick() {
-		log.Debug().Msgf("[upstream %s] Got QUIT for ourselves! !!NOOP!!", b.GetUpstreamConn().Server)
-		return nil
+		log.Debug().Msgf("[upstream %s] Got QUIT for ourselves! !!NOOP!!", b.GetUpstreamConn().Config.Server)
+		return true, nil
 	}
 
 	b.RemoveUserFromAllChannels(quittingNick)
@@ -22,5 +22,5 @@ func HandleQUIT(b Router, msg ircmsg.Message) error {
 	// Broadcast to clients to they can update their state
 	b.BroadcastToClients(msg)
 
-	return nil
+	return true, nil
 }

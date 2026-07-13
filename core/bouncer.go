@@ -5,13 +5,13 @@ package core
 
 import (
 	"bouncer/database"
+	"bouncer/ircevent"
 	"bouncer/models"
 
 	"fmt"
 	"strings"
 	"time"
 
-	"github.com/ergochat/irc-go/ircevent"
 	"github.com/ergochat/irc-go/ircmsg"
 	"github.com/rs/zerolog/log"
 )
@@ -23,7 +23,7 @@ var supportedCaps = map[string]bool{
 	"multi-prefix": true,
 }
 
-func NewBouncer(upstream *ircevent.Connection) *Bouncer {
+func NewBouncer(upstream *ircevent.UpstreamConnection) *Bouncer {
 	return &Bouncer{
 		upstreamConn: upstream,
 		routes:       make(map[string]DownstreamCommandHandler),
@@ -33,7 +33,7 @@ func NewBouncer(upstream *ircevent.Connection) *Bouncer {
 	}
 }
 
-func (b *Bouncer) GetUpstreamConn() *ircevent.Connection {
+func (b *Bouncer) GetUpstreamConn() *ircevent.UpstreamConnection {
 	if b.upstreamConn == nil {
 		log.Debug().Msg("Returning NULL upstreamConn!")
 	}
@@ -220,12 +220,12 @@ func (b *Bouncer) AddChannelUsers(channel string, users []string) {
 	for _, rawUser := range users {
 		// Check for bugs
 		if rawUser == "" {
-			BUG(fmt.Sprintf("[upstream %s] AddChannelUsers called with blank user string in array!", b.GetUpstreamConn().Server))
+			BUG(fmt.Sprintf("[upstream %s] AddChannelUsers called with blank user string in array!", b.GetUpstreamConn().Config.Server))
 			continue
 		}
 
 		nick, prefix := parsePrefix(rawUser)
-		log.Trace().Str("nick", nick).Str("prefix", prefix).Str("upstream", b.GetUpstreamConn().Server).Str("channel", channel).Msg("Adding prefixes")
+		log.Trace().Str("nick", nick).Str("prefix", prefix).Str("upstream", b.GetUpstreamConn().Config.Server).Str("channel", channel).Msg("Adding prefixes")
 		// Get or create state for user
 		user, exists := b.Users[nick]
 		if !exists {
@@ -310,7 +310,7 @@ func (b *Bouncer) RemoveUserFromChannel(channel string, nick string) {
 
 	user, exists := b.Users[nick]
 	if !exists {
-		log.Debug().Str("channel", channel).Str("nick", nick).Str("upstream", b.GetUpstreamConn().Server).Msg("Attempted removal on non-existent user")
+		log.Debug().Str("channel", channel).Str("nick", nick).Str("upstream", b.GetUpstreamConn().Config.Server).Msg("Attempted removal on non-existent user")
 		return
 	}
 
@@ -320,7 +320,7 @@ func (b *Bouncer) RemoveUserFromChannel(channel string, nick string) {
 	// Memory Cleanup: If they are no longer in ANY channels with the bouncer,
 	// delete them from the global map.
 	if len(user.ChanPrefixes) == 0 {
-		log.Debug().Str("channel", channel).Str("nick", nick).Str("upstream", b.GetUpstreamConn().Server).Msg("Removing UserState for user we no longer share any channels with")
+		log.Debug().Str("channel", channel).Str("nick", nick).Str("upstream", b.GetUpstreamConn().Config.Server).Msg("Removing UserState for user we no longer share any channels with")
 		delete(b.Users, nick)
 	}
 }
@@ -481,10 +481,10 @@ func (b *Bouncer) JoinAutoJoinChannels() error {
 	}
 
 	for _, channel := range autojoinChannels {
-		log.Debug().Msgf("[upstream %s] Joining autojoin channel: %s", b.GetUpstreamConn().Server, channel)
-		err := b.GetUpstreamConn().Join(channel)
+		log.Debug().Msgf("[upstream %s] Joining autojoin channel: %s", b.GetUpstreamConn().Config.Server, channel)
+		//err := b.GetUpstreamConn().Join(channel)
 		if err != nil {
-			log.Debug().Msgf("[upstream %s] Error joining autojoin channel %s: %v", b.GetUpstreamConn().Server, channel, err)
+			log.Debug().Msgf("[upstream %s] Error joining autojoin channel %s: %v", b.GetUpstreamConn().Config.Server, channel, err)
 			return err
 		}
 
@@ -512,8 +512,8 @@ func (b *Bouncer) Shutdown() {
 	// 2. Disconnect from upstream
 	if b.upstreamConn != nil && b.upstreamConn.Connected() {
 		log.Info().Msg("Sending QUIT to upstream server...")
-		b.upstreamConn.QuitMessage = "Shutdown() called"
-		b.upstreamConn.Quit()
+		//b.upstreamConn.QuitMessage = "Shutdown() called"
+		//b.upstreamConn.Quit()
 
 		// Give the TCP buffer a fraction of a second to flush the QUIT message
 		// before the process exits and destroys the socket.
@@ -540,7 +540,7 @@ func (b *Bouncer) ModifyUser(nick string, modifier func(user *models.UserState))
 	// Fetch existing user, or initialize a new one if they don't exist
 	user, exists := b.Users[nick]
 	if !exists {
-		log.Debug().Msgf("[upstream %s] Creating new UserState for %s", b.GetUpstreamConn().Server, nick)
+		log.Debug().Msgf("[upstream %s] Creating new UserState for %s", b.GetUpstreamConn().Config.Server, nick)
 		user = &models.UserState{
 			Nickname:     nick,
 			ChanPrefixes: make(map[string]string),

@@ -9,10 +9,10 @@ import (
 )
 
 // RPL_352 -- /WHO line
-func Handle352(b Router, msg ircmsg.Message) error {
+func Handle352(b Router, msg ircmsg.Message) (bool, error) {
 	if len(msg.Params) < 8 {
-		log.Warn().Msgf("[upstream %s] Invalid /WHO line receieved", b.GetUpstreamConn().Server)
-		return nil
+		log.Warn().Msgf("[upstream %s] Invalid /WHO line receieved", b.GetUpstreamConn().Config.Server)
+		return false, nil
 	}
 
 	// Required paramaters
@@ -49,12 +49,12 @@ func Handle352(b Router, msg ircmsg.Message) error {
 	})
 
 	b.BroadcastToClients(msg)
-	return nil
+	return true, nil
 }
 
 // RPL_315 -- End of /WHO
-func Handle315(b Router, msg ircmsg.Message) error {
+func Handle315(b Router, msg ircmsg.Message) (bool, error) {
 	// Forward message to client
 	b.BroadcastToClients(msg)
-	return nil
+	return true, nil
 }

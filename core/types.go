@@ -2,12 +2,12 @@ package core
 
 import (
 	"bouncer/database"
+	"bouncer/ircevent"
 	"bouncer/models"
 	"context"
 	"net"
 	"sync"
 
-	"github.com/ergochat/irc-go/ircevent"
 	"github.com/ergochat/irc-go/ircmsg"
 )
 
@@ -17,7 +17,7 @@ type DownstreamCommandHandler func(b *Bouncer, ds *DownstreamConnection, msg irc
 // Core bouncer struct
 // This holds the command handler mapping and the connection to the upstream server
 type Bouncer struct {
-	upstreamConn          *ircevent.Connection
+	upstreamConn          *ircevent.UpstreamConnection
 	DownstreamConnections []*DownstreamConnection
 	DB                    *database.DB
 	routes                map[string]DownstreamCommandHandler

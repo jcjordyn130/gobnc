@@ -4,8 +4,8 @@ import (
 	"github.com/ergochat/irc-go/ircmsg"
 )
 
-func Handle302(b Router, msg ircmsg.Message) error {
+func Handle302(b Router, msg ircmsg.Message) (bool, error) {
 	// Forward message to client
 	b.BroadcastToClients(msg)
-	return nil
+	return true, nil
 }

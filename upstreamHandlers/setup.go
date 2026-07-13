@@ -1,17 +1,16 @@
 package upstreamHandlers
 
 import (
+	"bouncer/ircevent"
 	"bouncer/models"
 
-	"github.com/ergochat/irc-go/ircevent"
 	"github.com/ergochat/irc-go/ircmsg"
-	"github.com/rs/zerolog/log"
 )
 
 // Router defines the abilities the upstream handlers need
 // from the core Bouncer to do their job.
 type Router interface {
-	GetUpstreamConn() *ircevent.Connection
+	GetUpstreamConn() *ircevent.UpstreamConnection
 	BroadcastToClients(msg ircmsg.Message)
 	LogToDB(msg ircmsg.Message)
 	ChangeDownstreamNick(newnick string)
@@ -31,15 +30,15 @@ type Router interface {
 	ModifyUser(nick string, modifier func(user *models.UserState))
 }
 
-type UpstreamCommandHandler func(b Router, msg ircmsg.Message) error
+type UpstreamCommandHandler func(b Router, us *ircevent.UpstreamConnection, msg ircmsg.Message) error
 
 // Register attaches all your upstream callbacks to a new connection.
 // It accepts the interface, NOT the core.Bouncer struct.
 func Register(b Router, cmd string, callback UpstreamCommandHandler) {
 	upstream := b.GetUpstreamConn()
 
-	upstream.AddCallback(cmd, func(e ircmsg.Message) {
-		log.Debug().Msgf("[upstream %s] Routing to command handler for: %s", upstream.Server, cmd)
-		callback(b, e)
+	upstream.RegisterCallback(cmd, func(us *ircevent.UpstreamConnection, e ircmsg.Message) (bool, error) {
+		callback(b, us, e)
+		return true, nil
 	})
 }
