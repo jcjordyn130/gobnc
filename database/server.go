@@ -10,6 +10,7 @@ import (
 )
 
 type Server struct {
+	Name     string `db:"name"`
 	Id       string `db:"id"`
 	Domain   string `db:"domain"`
 	Port     int    `db:"port"`
@@ -60,8 +61,8 @@ func (d *DB) AddServer(s Server) error {
 	// sqlx automatically matches the :named_parameters (e.g., :domain)
 	// to the `db` tags on your Server struct (e.g., `db:"domain"`).
 	query := `
-		INSERT INTO servers (id, domain, port, ssl, identity, user)
-		VALUES (:id, :domain, :port, :ssl, :identity, :user)`
+		INSERT INTO servers (name, id, domain, port, ssl, identity, user)
+		VALUES (:name, :id, :domain, :port, :ssl, :identity, :user)`
 
 	// Execute the insert using the struct directly
 	_, err := d.conn.NamedExec(query, s)
@@ -96,7 +97,7 @@ func (d *DB) RemoveServer(s Server) error {
 func (d *DB) UpdateServer(s Server) error {
 	// 1. Safety Check: Never execute an update without a WHERE clause target
 	if s.Id == "" {
-		return fmt.Errorf("cannot update user: missing user ID")
+		return fmt.Errorf("cannot update server: missing server ID")
 	}
 
 	// 2. The SQL Query
@@ -105,6 +106,7 @@ func (d *DB) UpdateServer(s Server) error {
 	query := `
 		UPDATE server
 		SET
+			name = :name,
 			domain = :domain,
 			port = :port,
 			ssl = :ssl,
@@ -146,7 +148,7 @@ func (d *DB) NewServer(u User) Server {
 	s.User = u.Id
 	s.Identity = u.Defaultidentity
 
-	log.Debug().Msgf("UUID for server %s: %s", s.Domain, s.Id)
+	log.Debug().Msgf("UUID for new server: %s", s.Id)
 
 	return s
 }
