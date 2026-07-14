@@ -80,3 +80,8 @@ func Handle301(b Router, msg ircmsg.Message) error {
 	b.BroadcastToClients(msg)
 	return nil
 }
+
+func Handle313(b Router, msg ircmsg.Message) error {
+	b.BroadcastToClients(msg)
+	return nil
+}

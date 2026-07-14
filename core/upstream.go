@@ -61,6 +61,7 @@ func (b *Bouncer) ConnectToServer(conn *ircevent.Connection) (err error) {
 		"338": upstreamHandlers.Handle338,
 		"402": upstreamHandlers.Handle402,
 		"671": upstreamHandlers.Handle671,
+		"313": upstreamHandlers.Handle313, // IRCOp
 
 		// Numerics: WHO
 		"352": upstreamHandlers.Handle352, // WHO line
