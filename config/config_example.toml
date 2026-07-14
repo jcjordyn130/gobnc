@@ -1,0 +1,28 @@
+# Controls if the upstream connections output the raw IRC lines to the logs
+verbose_upstream = false
+
+# Path to the database
+# This is important as it stores users, identities, servers, and ALL of the backlog
+dbpath = "test.db"
+
+# Address to listen on for downstream connections
+bind_address = "127.0.0.1:12345"
+
+# This has two uses, it controls the size of the in-memory message cache for messages 
+# before they are committed to the database.
+# It also controls the number of lines (per buffer) sent to clients on connect.
+maxqlen = 5000
+
+# This is how long the server waits for the upstream when disconnecting
+# before ignoring a proper shutdown and forcing the connection closed.
+GracefulShutdownTimeout = 30
+
+# Amount of logging to do
+# Most of the current logging is under "trace" or "debug" and is primarily used for bouncer development.
+#
+# Regular admins will want to set this to info or above.
+LogLevel = "trace"
+
+# This is a debugging function used only on UNIX-like OSes (Windows does not implement FIFOs the same way)
+# Any line echoed here is sent to the current upstream connection
+FIFOName = "/tmp/some.fifo"

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bouncer/config"
 	"bouncer/database"
 	"context"
 	"fmt"
@@ -69,11 +70,21 @@ func (c *ConfigCmd) removeAutoJoinChan(ctx context.Context, cmd *cli.Command) er
 	return nil
 }
 
+func (c *ConfigCmd) printDefault(ctx context.Context, cmd *cli.Command) error {
+	println(config.DefaultConfig)
+	return nil
+}
+
 func (c *ConfigCmd) Command() *cli.Command {
 	return &cli.Command{
 		Name:  "config",
 		Usage: "configure the bouncer",
 		Commands: []*cli.Command{
+			{
+				Name:   "default",
+				Usage:  "prints the default configuration file",
+				Action: c.printDefault,
+			},
 			{
 				Name:  "autojoin",
 				Usage: "manage the autojoin list",
