@@ -1,6 +1,3 @@
-# Controls if the upstream connections output the raw IRC lines to the logs
-verbose_upstream = false
-
 # Path to the database
 # This is important as it stores users, identities, servers, and ALL of the backlog
 dbpath = "test.db"

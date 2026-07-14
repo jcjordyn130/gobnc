@@ -51,13 +51,15 @@ func mainConnect(cmd *cli.Command, ctx context.Context, db *database.DB) {
 		panic(err)
 	}
 
+	log.Logger.GetLevel()
+
 	conn := ircevent.Connection{
 		Server:   fmt.Sprintf("%s:%d", serv.Domain, serv.Port),
 		UseTLS:   serv.Ssl,
 		Nick:     identity.Nickname,
 		User:     identity.Username,
 		RealName: identity.Nickname,
-		Debug:    true,
+		Debug:    log.Debug().Enabled(),
 	}
 
 	// Init bouncer
@@ -159,25 +161,15 @@ func main() {
 		},
 
 		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
-			// Process log level
-			levelStr := cmd.String("loglevel")
-
-			// This is because levelStr is blank by default
-			// but zerolog disables logging for a blank level string.
-			if levelStr != "" {
-				level, err := zerolog.ParseLevel(levelStr)
-				if err != nil {
-					return ctx, fmt.Errorf("invalid log level '%s': %w", levelStr, err)
-				}
-
-				zerolog.SetGlobalLevel(level)
-			}
-
 			// Setup CLI config overrides
 			// Add more as needed
 			overrides := make(map[string]any)
 			if cmd.IsSet("dbpath") {
 				overrides["DBPath"] = cmd.String("dbpath")
+			}
+
+			if cmd.IsSet("loglevel") {
+				overrides["LogLevel"] = cmd.String("loglevel")
 			}
 
 			// The reason we load config/database here instead of outside of CLI parsing
@@ -188,6 +180,13 @@ func main() {
 			if err != nil {
 				panic(err)
 			}
+
+			level, err := zerolog.ParseLevel(conf.LogLevel)
+			if err != nil {
+				return ctx, fmt.Errorf("invalid log level '%s': %w", level, err)
+			}
+
+			zerolog.SetGlobalLevel(level)
 
 			// Init database
 			newdb, err := database.NewDB(conf.DBPath, conf.MaxQLen)

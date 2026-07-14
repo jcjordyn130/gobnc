@@ -1,27 +1,23 @@
 package config
 
 import (
-	"strings"
+	_ "embed"
 
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 )
 
 type Config struct {
-	UpstreamServer          string `mapstructure:"upstream_server"`
-	UpstreamPort            int    `mapstructure:"upstream_port"`
-	UpstreamPassword        string `mapstructure:"upstream_password"`
-	UseTLS                  bool   `mapstructure:"usetls"`
-	IgnoreCerts             bool   `mapstructure:"ignorecerts"`
-	Nick                    string `mapstructure:"nick"`
-	Password                string `mapstructure:"password"`
 	BindAddress             string `mapstructure:"bind_address"`
-	VerboseUpstream         bool   `mapstructure:"verbose_upstream"`
 	DBPath                  string `mapstructure:"dbpath"`
 	MaxQLen                 int    `mapstructure:"maxqlen"`
 	GracefulShutdownTimeout int    `mapstructure:"graceful_shutdown_timeout"`
 	FIFOName                string `mapstructure:"fifoname"`
+	LogLevel                string `mapstructure:"LogLevel"`
 }
+
+//go:embed config_example.toml
+var DefaultConfig string
 
 func LoadConfig(conf *Config, overrides map[string]any) error {
 	v := viper.New()
@@ -35,18 +31,9 @@ func LoadConfig(conf *Config, overrides map[string]any) error {
 	// for now, $PWD is fine for debug
 	v.AddConfigPath(".") // look for config in the working directory
 
-	// 2. Setup environment variable overrides
-	// If you have a setting named 'upstream_server',
-	// viper will look for an environment variable named 'BNC_UPSTREAM_SERVER'
-	v.SetEnvPrefix("GOBNC")
-	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	v.BindEnv("DBPath")
-	v.AutomaticEnv()
-
 	// 3. Set Defaults
 	v.SetDefault("upstream_port", 6697)
 	v.SetDefault("bind_address", "127.0.0.1:12345")
-	v.SetDefault("verbose_upstream", false)
 	v.SetDefault("MaxQLen", 5000)
 	v.SetDefault("fifoname", "")
 	v.SetDefault("graceful_shutdown_timeout", 30)
