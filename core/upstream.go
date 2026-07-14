@@ -34,6 +34,7 @@ func (b *Bouncer) ConnectToServer(conn *ircevent.Connection) (err error) {
 		// Numerics: Connection & Welcome
 		"001": upstreamHandlers.Handle001, // RPL_WELCOME
 		"900": upstreamHandlers.Handle900, // RPL_LOGGEDIN
+		"465": upstreamHandlers.Handle465, // RPL_YOUREBANNEDCREEP
 
 		// Numerics: Channel state & lists
 		"324": upstreamHandlers.Handle324, // Channel modes
@@ -78,6 +79,7 @@ func (b *Bouncer) ConnectToServer(conn *ircevent.Connection) (err error) {
 		"305": upstreamHandlers.Handle305, // RPL_305 No Longer Away
 		"306": upstreamHandlers.Handle306, // RPL_306 Client Away
 		"396": upstreamHandlers.Handle396, // Vhost / Nickserv
+		"451": upstreamHandlers.Handle451, // RPL_NOTREGISTERED
 	}
 
 	// Register all upstream handlers dynamically

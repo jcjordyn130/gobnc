@@ -9,3 +9,8 @@ func Handle900(b Router, msg ircmsg.Message) error {
 	b.BroadcastToClients(msg)
 	return nil
 }
+
+func Handle451(b Router, msg ircmsg.Message) error {
+	b.BroadcastToClients(msg)
+	return nil
+}
