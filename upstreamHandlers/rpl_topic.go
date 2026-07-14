@@ -36,5 +36,6 @@ func Handle331(b Router, msg ircmsg.Message) error {
 	channel := msg.Params[1]
 	log.Debug().Msgf("[upstream %s] No TOPIC for channel %s", b.GetUpstreamConn().Server, channel)
 
+	b.BroadcastToClients(msg)
 	return nil
 }
