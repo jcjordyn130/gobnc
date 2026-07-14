@@ -39,6 +39,7 @@ func (b *Bouncer) ConnectToServer(conn *ircevent.Connection) (err error) {
 		"324": upstreamHandlers.Handle324, // Channel modes
 		"329": upstreamHandlers.Handle329, // Channel creation timestamp
 		"332": upstreamHandlers.Handle332, // Topic on join
+		"331": upstreamHandlers.Handle331, // No TOPIC
 		"353": upstreamHandlers.Handle353, // NAMES
 		"366": upstreamHandlers.Handle366, // End of NAMES
 		"367": upstreamHandlers.Handle367, // Banlist item

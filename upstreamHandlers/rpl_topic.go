@@ -25,3 +25,16 @@ func Handle332(b Router, msg ircmsg.Message) error {
 
 	return nil
 }
+
+func Handle331(b Router, msg ircmsg.Message) error {
+	// Sanity check
+	if len(msg.Params) < 2 {
+		log.Debug().Msgf("[upstream %s] Ignoring RPL 331 due to invalid parameters", b.GetUpstreamConn().Server)
+		return nil
+	}
+
+	channel := msg.Params[1]
+	log.Debug().Msgf("[upstream %s] No TOPIC for channel %s", b.GetUpstreamConn().Server, channel)
+
+	return nil
+}
