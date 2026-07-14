@@ -25,11 +25,11 @@ var supportedCaps = map[string]bool{
 
 func NewBouncer(upstream *ircevent.Connection) *Bouncer {
 	return &Bouncer{
-		upstreamConn: upstream,
-		routes:       make(map[string]DownstreamCommandHandler),
-		Channels:     make(map[string]*models.ChannelState),
-		Users:        make(map[string]*models.UserState),
-		ServerName:   "bnc.jordynsblog.org",
+		UpstreamConnections: make([]*UpstreamConnection, 0),
+		routes:              make(map[string]DownstreamCommandHandler),
+		Channels:            make(map[string]*models.ChannelState),
+		Users:               make(map[string]*models.UserState),
+		ServerName:          "bnc.jordynsblog.org",
 	}
 }
 

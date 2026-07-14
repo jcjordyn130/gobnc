@@ -17,7 +17,7 @@ type DownstreamCommandHandler func(b *Bouncer, ds *DownstreamConnection, msg irc
 // Core bouncer struct
 // This holds the command handler mapping and the connection to the upstream server
 type Bouncer struct {
-	upstreamConn          *ircevent.Connection
+	UpstreamConnections   []*UpstreamConnection
 	DownstreamConnections []*DownstreamConnection
 	DB                    *database.DB
 	routes                map[string]DownstreamCommandHandler
@@ -30,6 +30,7 @@ type Bouncer struct {
 
 	// Protects critical data structures
 	mu      sync.RWMutex // Protects the Channels map
+	us_mu   sync.RWMutex // Protects the UpstreamConnections
 	ds_mu   sync.RWMutex // Protects the DownstreamConnections
 	motd_mu sync.RWMutex // Protects the motdCache
 	user_mu sync.RWMutex // Protects the Users map
@@ -39,6 +40,11 @@ type Bouncer struct {
 
 	// Cached MOTD
 	motdCache []ircmsg.Message
+}
+
+// Upstream connection struct
+type UpstreamConnection struct {
+	UpstreamConn *ircevent.Connection
 }
 
 // Downstream connection struct
