@@ -68,6 +68,9 @@ func mainConnect(cmd *cli.Command, ctx context.Context, db *database.DB) {
 	// Assign the DB pointer to avoid copying sync primitives (sync.WaitGroup/noCopy)
 	b.DB = db
 
+	// Grab config
+	conf := config.Get()
+
 	// Register downstream handlers
 	// These are commands sent by clients connected to us
 	b.Register("PING", handlers.HandlePING)
@@ -100,7 +103,7 @@ func mainConnect(cmd *cli.Command, ctx context.Context, db *database.DB) {
 	log.Info().Msg("Gracefully shutting down... This may take up to 30 seconds.")
 
 	// Create time based context for shutdown
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Duration(5)*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Duration(conf.GracefulShutdownTimeout)*time.Second)
 	defer cancel()
 
 	// Create a channel to listen for the shutdown signal
@@ -137,9 +140,6 @@ func main() {
 	// Create variables
 	// WARN: *technically* this is leaving pointers to unallocated memory in DB, but this is just a placeholder
 	// so the program can compile. It will very quickly be overwritten with a valid structure by the Before() function
-	//
-	// It is fine for Config because all it holds is basic types anyways, so they'll all be blank.
-	var conf *config.Config = &config.Config{}
 	var db *database.DB = &database.DB{}
 
 	cliCmd := &cli.Command{
@@ -176,10 +176,12 @@ func main() {
 			// Is so the log level argument affects the two classes while allowing them to be used
 			// by CLI commands.
 			// Load config
-			err := config.LoadConfig(conf, overrides)
+			err := config.Load("", overrides)
 			if err != nil {
 				panic(err)
 			}
+
+			conf := config.Get()
 
 			level, err := zerolog.ParseLevel(conf.LogLevel)
 			if err != nil {
