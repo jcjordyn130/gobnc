@@ -17,34 +17,46 @@ type DownstreamCommandHandler func(b *Bouncer, ds *DownstreamConnection, msg irc
 // Core bouncer struct
 // This holds the command handler mapping and the connection to the upstream server
 type Bouncer struct {
-	UpstreamConnections   []*UpstreamConnection
-	DownstreamConnections []*DownstreamConnection
-	DB                    *database.DB
-	routes                map[string]DownstreamCommandHandler
+	Accounts map[string]*UserAccount
 
-	// Holds a mapping of channel names to state structures
-	Channels map[string]*models.ChannelState
-
-	// Holds a mapping of nicknames to state structures
-	Users map[string]*models.UserState
+	DB     *database.DB
+	routes map[string]DownstreamCommandHandler
 
 	// Protects critical data structures
-	mu      sync.RWMutex // Protects the Channels map
-	us_mu   sync.RWMutex // Protects the UpstreamConnections
-	ds_mu   sync.RWMutex // Protects the DownstreamConnections
-	motd_mu sync.RWMutex // Protects the motdCache
-	user_mu sync.RWMutex // Protects the Users map
+	mu sync.RWMutex // Protects the Channels map
 
 	// Fake server name to use when broadcasting to downstream clients
 	ServerName string
+}
+
+type UserAccount struct {
+	Username string
+	Password string // HASHED
+
+	// Networks maps a friendly name (ex. 'libera' or 'ircat') to the connection type
+	Networks map[string]*Network
+
+	// Clients are the active downstream connections
+	Clients []*DownstreamConnection
+
+	// State!!!
+	mu sync.RWMutex
+}
+
+type Network struct {
+	Name         string // Friendly name (ex. 'libera' or 'irccat')
+	UpstreamConn *ircevent.Connection
+
+	// Old bouncer state specific to this network to avoid collisions
+	// and excessive locking.
+	Channels map[string]*models.ChannelState
+	Peers    map[string]*models.UserState
 
 	// Cached MOTD
 	motdCache []ircmsg.Message
-}
 
-// Upstream connection struct
-type UpstreamConnection struct {
-	UpstreamConn *ircevent.Connection
+	// State!!!!
+	mu sync.RWMutex
 }
 
 // Downstream connection struct
@@ -52,6 +64,11 @@ type UpstreamConnection struct {
 type DownstreamConnection struct {
 	Conn net.Conn
 	Nick string
+
+	// These hold the specific network and account this downstream is bound to
+	// We do NOT support IRCv3 multiplexing
+	Account       *UserAccount
+	ActiveNetwork *Network
 
 	// These hold the signal for goroutines that are using this
 	// to exit on disconnect
