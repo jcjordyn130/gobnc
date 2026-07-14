@@ -22,7 +22,7 @@ jobs:
         check-latest: true
         
     - name: Build
-      run: go build -o ./bouncer -v .
+      run: go build -gcflags="-e" -race -o ./bouncer -v .
 
     - name: Test
       run: go test -v ./...
@@ -45,7 +45,7 @@ jobs:
         check-latest: true
         
     - name: Build
-      run: go build -o ./bouncer.exe -v .
+      run: go build -gcflags="-e" -race -o ./bouncer.exe -v .
 
     - name: Test
       run: go test -v ./...
