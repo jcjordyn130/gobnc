@@ -25,31 +25,10 @@ var supportedCaps = map[string]bool{
 
 func NewBouncer(upstream *ircevent.Connection) *Bouncer {
 	return &Bouncer{
-		UpstreamConnections: make([]*UpstreamConnection, 0),
-		routes:              make(map[string]DownstreamCommandHandler),
-		Channels:            make(map[string]*models.ChannelState),
-		Users:               make(map[string]*models.UserState),
-		ServerName:          "bnc.jordynsblog.org",
+		Accounts:   make(map[string]*UserAccount),
+		routes:     make(map[string]DownstreamCommandHandler),
+		ServerName: "bnc.jordynsblog.org",
 	}
-}
-
-func (b *Bouncer) GetUpstreamConn() *ircevent.Connection {
-	if b.upstreamConn == nil {
-		log.Debug().Msg("Returning NULL upstreamConn!")
-	}
-
-	return b.upstreamConn
-}
-
-func (b *Bouncer) GetDownstreamConns() []*DownstreamConnection {
-	b.ds_mu.RLock()
-	activeClients := make([]*DownstreamConnection, 0, len(b.DownstreamConnections))
-	for _, ds := range b.DownstreamConnections {
-		activeClients = append(activeClients, ds)
-	}
-	b.ds_mu.RUnlock()
-
-	return activeClients
 }
 
 func (b *Bouncer) SetChannelCreationTime(channel string, createTime string) {
