@@ -181,6 +181,12 @@ func (b *Bouncer) spoofSource(ds *DownstreamConnection, msg ircmsg.Message) ircm
 		}
 	}
 
+	// Same thing with MODE
+	if msg.Command == "MODE" {
+		log.Debug().Msgf("[downstream %s] Spoofing prefix for command %s to bouncer server name %s", ds.Conn.RemoteAddr(), msg.Command, b.ServerName)
+		msg.Source = b.ServerName
+	}
+
 	return msg
 }
 
