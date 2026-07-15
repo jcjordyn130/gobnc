@@ -23,3 +23,7 @@ LogLevel = "trace"
 # This is a debugging function used only on UNIX-like OSes (Windows does not implement FIFOs the same way)
 # Any line echoed here is sent to the current upstream connection
 FIFOName = "/tmp/some.fifo"
+
+# This is yet another debugging function, it controls if the bouncer starts up a Golang PProf HTTP server.
+# This controls the address it binds to, and typically, you'll *only* want it on localhost.
+PProfBindAddress = ""

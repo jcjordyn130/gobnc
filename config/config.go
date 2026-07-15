@@ -15,6 +15,7 @@ type Config struct {
 	GracefulShutdownTimeout int    `mapstructure:"graceful_shutdown_timeout"`
 	FIFOName                string `mapstructure:"fifoname"`
 	LogLevel                string `mapstructure:"LogLevel"`
+	PProfBindAddress        string `mapstructure:"PProfBindAddress"`
 }
 
 //go:embed config_example.toml
@@ -53,6 +54,7 @@ func Load(filepath string, overrides map[string]any) error {
 		v.SetDefault("MaxQLen", 5000)
 		v.SetDefault("fifoname", "")
 		v.SetDefault("graceful_shutdown_timeout", 30)
+		v.SetDefault("PProfBindAddress", "")
 
 		// Inject any overrides for the CLI
 		for k, val := range overrides {
