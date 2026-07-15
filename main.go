@@ -15,6 +15,7 @@ import (
 	"bouncer/downstreamHandlers"
 	handlers "bouncer/downstreamHandlers"
 
+	"net/http"
 	_ "net/http/pprof" // The blank identifier is required here to register the handlers
 
 	"github.com/ergochat/irc-go/ircevent"
@@ -23,7 +24,10 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-func mainConnect(cmd *cli.Command, ctx context.Context, db *database.DB) {
+func mainConnect(cmd *cli.Command, ctx context.Context) {
+	// Grab database
+	db := database.Get()
+
 	// Grab user from database
 	user, err := db.GetUserByUsername(cmd.String("user"))
 	if err != nil {
@@ -137,11 +141,6 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	// Create variables
-	// WARN: *technically* this is leaving pointers to unallocated memory in DB, but this is just a placeholder
-	// so the program can compile. It will very quickly be overwritten with a valid structure by the Before() function
-	var db *database.DB = &database.DB{}
-
 	cliCmd := &cli.Command{
 		Name:  "gobnc",
 		Usage: "IRC bouncer",
@@ -183,6 +182,12 @@ func main() {
 
 			conf := config.Get()
 
+			// Start PProf server if we need
+			if conf.PProfBindAddress != "" {
+				log.Debug().Msgf("[main] Starting PProf server on %s", conf.PProfBindAddress)
+				go http.ListenAndServe(conf.PProfBindAddress, nil)
+			}
+
 			level, err := zerolog.ParseLevel(conf.LogLevel)
 			if err != nil {
 				return ctx, fmt.Errorf("invalid log level '%s': %w", level, err)
@@ -191,15 +196,10 @@ func main() {
 			zerolog.SetGlobalLevel(level)
 
 			// Init database
-			newdb, err := database.NewDB(conf.DBPath, conf.MaxQLen)
+			err = database.Open(conf.DBPath, conf.MaxQLen)
 			if err != nil {
 				panic(err)
 			}
-
-			// Override existing pointer for sub commands
-			// This *has* to happen otherwise the subcommands still point to a nil DB structure
-			// and will cause a segfault.
-			*db = *newdb
 
 			return ctx, nil
 		},
@@ -223,7 +223,7 @@ func main() {
 					},
 				},
 				Action: func(c context.Context, cmd *cli.Command) error {
-					mainConnect(cmd, c, db)
+					mainConnect(cmd, c)
 					return nil
 				},
 			},
@@ -237,10 +237,10 @@ func main() {
 					return nil
 				},
 			},
-			cmd.NewConfigCmd(db).Command(),
-			cmd.NewUserCmd(db).Command(),
-			cmd.NewDBCmd(db).Command(),
-			cmd.NewServerCmd(db).Command(),
+			cmd.NewConfigCmd().Command(),
+			cmd.NewUserCmd().Command(),
+			cmd.NewDBCmd().Command(),
+			cmd.NewServerCmd().Command(),
 		},
 	}
 

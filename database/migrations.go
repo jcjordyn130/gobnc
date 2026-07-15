@@ -1,5 +1,11 @@
 package database
 
+import (
+	"fmt"
+
+	"github.com/rs/zerolog/log"
+)
+
 type Migration struct {
 	Version int    // A sequential number (1, 2, 3...) or a timestamp
 	Name    string // e.g., "add_command_column_to_history"
@@ -94,4 +100,61 @@ var registeredMigrations = []Migration{
 			ALTER TABLE servers ADD COLUMN name TEXT;
 		`,
 	},
+}
+
+// Internal function used to handle migrations during database opening
+func (db *DB) runMigrations() error {
+	// 1. Ensure the migration tracking table exists
+	_, err := db.conn.Exec(`
+		CREATE TABLE IF NOT EXISTS schema_migrations (
+			version INTEGER PRIMARY KEY
+		);
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to create schema_migrations table: %w", err)
+	}
+
+	// 2. Find the current database version
+	var currentVersion int
+	err = db.conn.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&currentVersion)
+	if err != nil {
+		// If the table is empty, Scan returns an error or NULL. We treat it as version 0.
+		currentVersion = 0
+	}
+
+	log.Debug().Msgf("[database] Current schema version: %d", currentVersion)
+
+	// 3. Iterate through registered migrations
+	for _, migration := range registeredMigrations {
+		if migration.Version > currentVersion {
+			log.Debug().Msgf("[database] Applying migration %d: %s", migration.Version, migration.Name)
+
+			// Start a transaction for this specific migration
+			tx, err := db.conn.Begin()
+			if err != nil {
+				return fmt.Errorf("failed to begin transaction for migration %d: %w", migration.Version, err)
+			}
+
+			// Execute the migration SQL
+			if _, err := tx.Exec(migration.UpSQL); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("failed to execute migration %d (%s): %w", migration.Version, migration.Name, err)
+			}
+
+			// Update the schema tracking table
+			if _, err := tx.Exec("INSERT INTO schema_migrations (version) VALUES (?)", migration.Version); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("failed to update migration version to %d: %w", migration.Version, err)
+			}
+
+			// Commit the transaction
+			if err := tx.Commit(); err != nil {
+				return fmt.Errorf("failed to commit migration %d: %w", migration.Version, err)
+			}
+
+			log.Debug().Msgf("[database] Successfully applied migration %d", migration.Version)
+		}
+	}
+
+	return nil
 }

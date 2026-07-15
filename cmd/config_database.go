@@ -16,10 +16,8 @@ type DBCmd struct {
 }
 
 // 2. Create a constructor to enforce dependency injection
-func NewDBCmd(db *database.DB) *DBCmd {
-	return &DBCmd{
-		db: db,
-	}
+func NewDBCmd() *DBCmd {
+	return &DBCmd{}
 }
 
 func (c *DBCmd) validateDB(ctx context.Context, cmd *cli.Command) error {
@@ -48,6 +46,10 @@ func (c *DBCmd) Command() *cli.Command {
 	return &cli.Command{
 		Name:  "database",
 		Usage: "database operations",
+		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
+			c.db = database.Get()
+			return ctx, nil
+		},
 		Commands: []*cli.Command{
 			{
 				Name:      "validate",

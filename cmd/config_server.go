@@ -17,10 +17,8 @@ type ServerCmd struct {
 }
 
 // 2. Create a constructor to enforce dependency injection
-func NewServerCmd(db *database.DB) *ServerCmd {
-	return &ServerCmd{
-		db: db,
-	}
+func NewServerCmd() *ServerCmd {
+	return &ServerCmd{}
 }
 
 func (c *ServerCmd) newServer(ctx context.Context, cmd *cli.Command) error {
@@ -71,6 +69,10 @@ func (c *ServerCmd) Command() *cli.Command {
 	return &cli.Command{
 		Name:  "server",
 		Usage: "server operations",
+		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
+			c.db = database.Get()
+			return ctx, nil
+		},
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:        "username",

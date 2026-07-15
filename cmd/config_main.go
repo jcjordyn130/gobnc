@@ -17,10 +17,8 @@ type ConfigCmd struct {
 }
 
 // 2. Create a constructor to enforce dependency injection
-func NewConfigCmd(db *database.DB) *ConfigCmd {
-	return &ConfigCmd{
-		db: db,
-	}
+func NewConfigCmd() *ConfigCmd {
+	return &ConfigCmd{}
 }
 
 func (c *ConfigCmd) listAutoJoinChans(ctx context.Context, cmd *cli.Command) error {
@@ -79,6 +77,10 @@ func (c *ConfigCmd) Command() *cli.Command {
 	return &cli.Command{
 		Name:  "config",
 		Usage: "configure the bouncer",
+		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
+			c.db = database.Get()
+			return ctx, nil
+		},
 		Commands: []*cli.Command{
 			{
 				Name:   "default",

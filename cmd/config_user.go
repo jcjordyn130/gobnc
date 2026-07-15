@@ -17,10 +17,8 @@ type UserCmd struct {
 }
 
 // 2. Create a constructor to enforce dependency injection
-func NewUserCmd(db *database.DB) *UserCmd {
-	return &UserCmd{
-		db: db,
-	}
+func NewUserCmd() *UserCmd {
+	return &UserCmd{}
 }
 
 func (c *UserCmd) addUser(ctx context.Context, cmd *cli.Command) error {
@@ -144,6 +142,10 @@ func (c *UserCmd) Command() *cli.Command {
 	return &cli.Command{
 		Name:  "user",
 		Usage: "configure the userstore",
+		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
+			c.db = database.Get()
+			return ctx, nil
+		},
 		Commands: []*cli.Command{
 			{
 				Name:      "add",
